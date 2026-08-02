@@ -16,6 +16,10 @@ API-first payment aggregator for Cameroon — accept MTN Mobile Money and Orange
 | [docs/04-mobile-app.md](docs/04-mobile-app.md) | Merchant mobile app spec (Flutter, Android-first) |
 | [docs/05-security-compliance.md](docs/05-security-compliance.md) | Security controls, KYC/AML, CEMAC regulatory path |
 | [docs/06-roadmap.md](docs/06-roadmap.md) | Phased delivery plan, risks, immediate next steps |
+| [docs/07-brand-design-system.md](docs/07-brand-design-system.md) | Brand, colors, typography, Lucide icon map, components, layout, motion |
+| [docs/08-web-screens.md](docs/08-web-screens.md) | Dashboard + ops console: every page, action, state; notifications/email matrix |
+| [docs/09-checkout-screens.md](docs/09-checkout-screens.md) | Hosted checkout & payment link pages: every screen, state, edge case |
+| [docs/10-mobile-screens.md](docs/10-mobile-screens.md) | Mobile app: full screen inventory, flows, offline/error behaviors |
 
 ## Stack (decided)
 
