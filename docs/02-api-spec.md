@@ -101,21 +101,46 @@ Optional catalog fields (product-style links, quantity picker on the hosted page
 ```
 POST /payouts                single payout
 POST /payout_batches         bulk (array of items or uploaded file token)
+GET  /payout_batches         list (filter: status, created[gte|lte])
 GET  /payout_batches/{id}    batch with per-item statuses
-POST /payout_batches/{id}/approve   (maker–checker; requires approver role)
+POST /payout_batches/validate       server-side pre-check of items/CSV rows (no batch created) → per-row errors (invalid phone, non-integer amount, amount < 100, duplicate reference, unknown channel prefix, missing name)
+POST /payout_batches/{id}/approve   (maker–checker; requires approver role, ≠ creator)
+POST /payout_batches/{id}/reject    checker rejection { "reason": "..." } → batch back to draft, reason surfaced
+GET  /payout_batches/{id}/report    CSV/PDF result report (per-item outcome)
+POST /payouts/{id}/retry            retry a failed item (Idempotency-Key required)
 GET  /payouts/{id} , /payouts
 ```
 
 Payout item: `{ "amount": 250000, "channel": "orange_money", "beneficiary": { "phone": "237690000000", "name": "J. Fotso" }, "reference": "SAL-2026-07-jfotso" }`. Batch lifecycle: `draft → pending_approval → processing → completed | partially_failed`.
 
+#### 2.3.1 Beneficiaries & payroll lists
+
+```
+GET/POST /beneficiaries , PATCH/DELETE /beneficiaries/{id}   saved payees { phone, name, channel } (operator name-check where available)
+GET/POST /payroll_lists , GET/PATCH/DELETE /payroll_lists/{id}   named, reusable lists of beneficiary+amount rows
+POST /payroll_lists/{id}/schedule    { cadence, next_run_date } — at run date the system creates a draft batch, checks funding, moves it to pending_approval
+```
+
+#### 2.3.2 Fees & internal transfers
+
+```
+GET  /fees                   fee schedule per channel/direction (collection & payout), for review screens
+POST /balance_transfers      instant internal transfer available balance → payout wallet { amount }
+```
+
 ### 2.4 Subscriptions
 
 ```
 POST /plans                  { name, amount, interval: "week"|"month"|"year" }
+GET  /plans                  list
+PATCH /plans/{id}            edit (name; amount changes apply to future cycles)
+POST /plans/{id}/archive     archive — running subscriptions continue, no new signups
 POST /subscriptions          { plan, customer: {phone, name}, start_date? }
-GET  /subscriptions/{id}, /subscriptions
+GET  /subscriptions/{id}, /subscriptions   (filter: status, customer)
 POST /subscriptions/{id}/cancel | /pause | /resume
 GET  /subscriptions/{id}/invoices
+POST /invoices/{id}/send_link       generate + send a single-use dunning payment link (SMS/WhatsApp) for an open invoice
+POST /invoices/send_links           bulk dunning { invoice_ids: [...] } — max 1 manual dunning / 24 h / customer
 ```
 
 Each cycle generates an `invoice` → charge attempts per retry ladder → invoice `paid | uncollectible`; subscription `active → past_due → canceled` after N failed cycles.
@@ -123,9 +148,11 @@ Each cycle generates an `invoice` → charge attempts per retry ladder → invoi
 ### 2.5 Balances, Ledger & Settlements
 
 ```
-GET /balance                          { available: [...], pending: [...] } per currency
+GET /balance                          { available: [...], pending: [...], payout_wallet: [...] } per currency
 GET /balance_transactions             ledger lines visible to merchant (charge, fee, payout, adjustment)
 GET /settlements , /settlements/{id}  T+1 transfers to merchant's own account, with included transactions
+GET /settlements/{id}/statement.pdf   settlement statement (PDF)
+GET /settlements/{id}/statement.csv   settlement statement (CSV)
 POST /topups                          fund payout wallet (instructions + auto-match)
 ```
 
@@ -133,17 +160,27 @@ POST /topups                          fund payout wallet (instructions + auto-ma
 
 ```
 POST/GET /customers            phone-keyed; auto-created from charges
+GET  /customers/{id}           retrieve (profile + totals)
+PATCH /customers/{id}          edit name/metadata
+POST /customers/{id}/notes     append an internal note (append-only)
 ```
 
 ### 2.7 Webhooks & Events
 
 ```
 POST/GET/DELETE /webhook_endpoints     { url, enabled_events: ["charge.succeeded", ...] }
+PATCH /webhook_endpoints/{id}          edit url / enabled_events
+POST /webhook_endpoints/{id}/enable    re-enable an auto-disabled endpoint
+POST /webhook_endpoints/{id}/roll_secret   new signing secret (revealed once)
+GET  /webhook_endpoints/{id}/deliveries    delivery log (event, HTTP code, attempt #, next_retry_at)
+POST /webhook_deliveries/{id}/redeliver    manual redelivery of one delivery
 GET /events , /events/{id}             immutable event log, 90-day retention
 POST /webhook_endpoints/{id}/ping
 ```
 
-Event types (initial): `charge.succeeded`, `charge.failed`, `charge.expired`, `refund.succeeded`, `payout.succeeded`, `payout.failed`, `payout_batch.completed`, `invoice.paid`, `invoice.payment_failed`, `subscription.past_due`, `subscription.canceled`, `settlement.paid`, `balance.topup.received`.
+Event types (initial): `charge.succeeded`, `charge.failed`, `charge.expired`, `refund.succeeded`, `payout.succeeded`, `payout.failed`, `payout_batch.completed`, `payout_batch.pending_approval` (maker–checker: batch awaits an approver), `payout_batch.partially_failed` (batch finished with ≥ 1 failed item), `invoice.paid`, `invoice.payment_failed`, `subscription.past_due`, `subscription.canceled`, `settlement.paid`, `balance.topup.received`, `kyb.decision` (KYB approved/rejected, with tier), `security.new_device` (new device/session on the account), `team.member_changed` (member added, role changed, or removed).
+
+The last five types double as mobile push notification triggers (routing per docs/15's push table).
 
 Delivery: POST JSON `{ id, type, created, data: { object } }` with headers:
 
@@ -159,6 +196,111 @@ Reject if |now − t| > 5 min (replay protection). Retries: 1m, 5m, 30m, 2h, 6h,
 GET /channels        provider health/availability (mtn_momo: operational | degraded | down)
 GET /events/verify   SDK helper endpoints as needed
 ```
+
+### 2.9 Auth & sessions (dashboard + app)
+
+First-party surface: session cookie (web) / refresh + access tokens (app). Not available to API keys.
+
+```
+POST /auth/signup/otp        start signup — send OTP to phone (or email on web)
+POST /auth/signup            complete signup with verified OTP + password
+POST /auth/otp               send a login/verification OTP (rate-limited)
+POST /auth/otp/verify        verify an OTP code
+POST /auth/login             phone/email + password → session (or 2FA challenge)
+POST /auth/login/totp        complete login with TOTP code
+POST /auth/password/forgot   start password reset (OTP/email)
+POST /auth/password/reset    set new password with reset token
+POST /auth/recovery          account recovery with identity re-verification (lost phone/2FA)
+POST /auth/step_up           re-prompt 2FA for sensitive actions → elevated token (5 min validity); actions requiring it fail step_up_required
+```
+
+App-only:
+
+```
+POST /auth/pin/set           set/replace app PIN (payout approvals locked 24 h after a PIN reset)
+POST /auth/token/refresh     rotate access token
+POST /auth/logout            revoke current session
+```
+
+### 2.10 Current user (`/me`)
+
+```
+GET/PATCH /me                profile (name, phone, email, locale)
+POST /me/password            change password → revokes other sessions + security email
+POST /me/totp · POST /me/totp/verify · DELETE /me/totp   TOTP enrollment / verify / disable (disable forbidden for Owner/Admin at Tier ≥ 1)
+GET /me/sessions · DELETE /me/sessions/{id}              active sessions, revoke one
+GET /me/devices · DELETE /me/devices/{id}                enrolled devices, revoke one
+POST /devices                app: register device + FCM push token
+POST /devices/{id}/enroll    app: enroll device for approvals (PIN/biometric)
+GET /me/notifications        in-product notification feed (type, title, body, read state, linked object)
+POST /me/notifications/mark_all_read
+GET/PATCH /me/notification_preferences   per-event channel toggles (push/email/SMS/WhatsApp)
+GET /me/memberships          businesses this user belongs to (role per membership)
+POST /me/switch              switch active business context { membership_id }
+DELETE /me/memberships/{id}  leave a business (forbidden for its last Owner → last_owner)
+```
+
+(App path aliases `GET /notifications`, `POST /notifications/mark_all_read`, `GET /sessions`, `GET /devices` resolve to the `/me/...` endpoints above — one canonical set.)
+
+### 2.11 Merchant profile & KYB
+
+```
+GET/PATCH /merchant          business settings incl. payout approval threshold (threshold change requires step-up 2FA)
+PUT  /merchant/profile       resumable onboarding draft (business info, saved per step)
+POST /merchant/logo          upload/replace logo (multipart)
+PATCH /merchant/settlement_account   change settlement account — takes effect after 24 h cooldown (settlement_account_cooldown while pending)
+GET/POST /merchant/kyb_documents     list docs (type, status sent/approved/rejected + reason) · upload/replace a doc
+POST /merchant/kyb/submit    submit dossier for review
+POST /merchant/kyb/request_tier      request Tier 2 → returns list of additional required docs
+GET/PUT /merchant/golive_checklist   persisted go-live checklist state
+```
+
+### 2.12 Team & invitations
+
+```
+GET /members · PATCH /members/{id} · DELETE /members/{id}   list, change role, remove (Owner required to touch an Admin; last Owner protected)
+GET/POST /invites            list, invite { phone/email, role } — expire after 7 days
+POST /invites/{id}/resend    resend (60 s cooldown) · DELETE /invites/{id}  cancel
+GET  /invites/{token}        invitee-side: resolve invite (merchant, role, inviter)
+POST /invites/{token}/accept | /decline
+```
+
+### 2.13 Developer tooling
+
+```
+GET/POST /api_keys · GET /api_keys/{id} · DELETE /api_keys/{id}   list/create/retrieve/revoke (secret revealed once at creation)
+POST /api_keys/{id}/rotate   rotate with grace window (0 / 24 h / 72 h — old key auto-revoked after)
+GET /api_logs · GET /api_logs/{id}   recent API request log (method, path, status, latency, key prefix, redacted bodies)
+POST /test_events            fire a sample event at an endpoint (test mode "send test event")
+```
+
+### 2.14 Platform & app support
+
+```
+GET /app/config              app bootstrap: min supported version, maintenance flag, USSD codes per channel, FAQ manifest, feature flags
+GET /channels/{channel}/history      provider status history (uptime/degradations)
+POST /support/tickets        create a support ticket { subject, body, attachments? }
+GET /stats/volume            aggregated charge volume time-series (period, granularity, stacked by channel) for dashboards
+GET /search?q=               federated search (charges, customers, links, payouts, batches) — grouped results, max 5 per group
+POST /exports · GET /exports/{id}    async export jobs (statements/CSV; ≤ 10 000 rows returns a direct URL, larger jobs email a signed URL expiring after 72 h → export_expired)
+```
+
+### 2.15 Public payer surface (`pay.ijimpay.com`)
+
+Unauthenticated / checkout-session-scoped endpoints consumed by the hosted pages and widget. Server-brokered — no secret key ever reaches the browser; responses expose only payer-safe fields.
+
+```
+GET  /v1/public/links/{slug}             resolve a payment link landing: title, amount config (incl. min_amount), catalog fields, merchant display profile, accepted channels, support contact, state (active | expired | paid)
+GET  /v1/public/checkout_sessions/{id}   resolve a checkout session (cart snapshot, urls, state)
+POST /v1/public/charges                  payer-side charge creation from the hosted page (publishable-key/session scoped)
+GET  /v1/public/charges/{id}             status poll — status, failure_code, expires_at only
+GET  /v1/public/charges/{id}/stream      SSE status stream (text/event-stream; progressive enhancement over polling)
+POST /v1/public/charges/{id}/resend      cancel + recreate the pending charge (optionally with a new payer phone); allowed once per charge → resend_limit_reached
+GET  /v1/public/receipts/{receipt_id}    receipt resource (mirrors charge: merchant, amount, status, refunds, session items)
+GET  /v1/public/receipts/{receipt_id}/pdf   receipt PDF (short alias `GET /r/{receipt_id}.pdf` on pay.ijimpay.com)
+```
+
+Merchant public display profile (embedded in link/session resolutions): name, logo, `support_phone`, `support_whatsapp`, `fee_passthrough` (bool — when true the hosted page shows the "dont frais" line), `accepted_channels[]`.
 
 ## 3. Test Mode
 
