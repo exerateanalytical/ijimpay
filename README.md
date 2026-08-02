@@ -26,6 +26,7 @@ API-first payment aggregator for Cameroon — accept MTN Mobile Money and Orange
 | [docs/14-checkout-pages-spec.md](docs/14-checkout-pages-spec.md) | Checkout: 22 screens with final FR/EN copy for every state |
 | [docs/15-mobile-app-screens-spec.md](docs/15-mobile-app-screens-spec.md) | Mobile app: 50 screens, 19 sheets — gestures, offline, push routing |
 | [docs/16-flows-catalog.md](docs/16-flows-catalog.md) | 74 end-to-end flows + complete message catalog (35 notifications) |
+| [docs/17-internal-api.md](docs/17-internal-api.md) | Internal ops API: 77 endpoints, dual-control lifecycle, WebAuthn |
 | [docs/review/](docs/review/) | Adversarial completeness reviews (gap reports) |
 
 ## Stack (decided)

@@ -538,6 +538,15 @@ Rappel de style : la pastille `draft` (contour ink-500, lots de paiement uniquem
 
 ## 7. Open issues — remaining gaps targeting reference docs (docs/01–10)
 
+> **Resolution status (2026-08-02)** — all six items below are now RESOLVED:
+> 1. ✅ docs/02 absorbed all 46 additions (new §2.9–2.15 incl. the public payer surface + SSE, 5 new event/push types, new fields and error codes).
+> 2. ✅ docs/07 §4 absorbed the merged icon list (35 icons) with arbitrations recorded: `phone` canonical (`phone-call` banned), `eye` reveal-only with `venetian-mask` for ops impersonation, `cloud-off` sole offline icon; corrections applied in docs/12/13/16.
+> 3. ✅ docs/03 gained §2b Ops Console Tables (approval_requests, risk_*, str_packs, staff_*, merchant_limits + history, ops_settings, append-only notes) and `payout_inflight` promoted into the chart of accounts.
+> 4. ✅ docs/17-internal-api.md created — 77 endpoints, 12 domains, dual-control lifecycle, WebAuthn step-up, 5 error codes.
+> 5. ✅ Supersession banners added to docs/08, docs/09, docs/10.
+> 6. ✅ Counting-rule note added under docs/15's INVENTORY block.
+> The list below is kept for historical traceability.
+
 All `[MUST]` findings in `docs/review/` that targeted docs/12–16 were verified as resolved in the final spec docs (spot-checked: charge cancel/resend API-ADD-17/18, 1 000-line CSV cap, D-49 recovery, D-38 approval threshold, DM-16 internal transfer, DM-30 scheduling, D-32 rotation, D-34 re-enable, DM-35 rail filter + Viewer, catalog fields in D-14, suspension/impersonation banners §0.3, O-21–O-24, OM-02 Tier-2 DC, F-070–F-074, M-33 note). What remains open lands in the **reference docs**, which the spec docs cannot fix themselves:
 
 1. **docs/02 (API spec)** — must absorb the consolidated additions §5.1 items 1–46 (endpoints, filters, fields, SSE stream, public payer surface) and the five new push/event types; until then the five spec docs reference endpoints that do not exist in the contract.
