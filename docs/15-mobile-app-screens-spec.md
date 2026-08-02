@@ -1110,3 +1110,4 @@ Deep links: `ijimpay://tx/{charge_id}` → M-27 · `ijimpay://batch/{id}` → M-
 ---
 
 INVENTORY: pages=50 tabs=3 modals=19 forms=18 tables=69 actions=133
+(counting rule: "tables" counts specification markdown tables in this doc, not rendered UI data tables — the app renders essentially none; docs/12 and docs/13 count rendered UI tables, so cross-surface table totals are not comparable. See docs/11 §2 footnote.)

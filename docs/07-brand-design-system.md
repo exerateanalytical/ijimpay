@@ -83,6 +83,30 @@ Library: **lucide** (web `lucide-react`, app `lucide_flutter` or exported SVGs).
 | Offline/queued | `cloud-off` | Language | `globe` |
 | Danger/destructive | `trash-2` | Edit | `pencil` |
 | Back | `arrow-left` | More actions | `ellipsis-vertical` |
+| Retry / redeliver / re-poll | `rotate-cw` | Reveal / hide (passwords, amounts) | `eye` / `eye-off` |
+| Upload | `upload` | Document capture (mobile) | `camera` |
+| CSV import | `file-up` | Column mapping | `table` |
+| Validation report | `list-checks` | Date / period picker | `calendar` |
+| Invite member | `user-round-plus` | Enrolled device | `smartphone` |
+| Close modal/drawer/widget | `x` | Maintenance | `wrench` |
+| Re-sign-in | `log-in` | Subscription pause / resume | `circle-pause` / `circle-play` |
+| Reconciliation & discrepancies | `scale` | Risk (queue, cases, flags) | `siren` |
+| Suspend / circuit-breaker | `octagon-pause` | Manual journal entries | `book-text` |
+| Quantity decrement | `minus-circle` | Accordion | `chevron-down` |
+| Open in browser | `external-link` | Call by phone (merchant, voice OTP) | `phone` |
+| Ops read-only impersonation | `venetian-mask` | Image | `image` |
+| Torch (scanner) | `flashlight` | Keypad backspace | `delete` |
+| List chevron | `chevron-right` | Contact picker | `book-user` |
+| Printer pairing | `bluetooth` | Add (app FAB) | `plus` |
+| Video tutorials | `play-circle` | Business switcher | `building-2` |
+| Statements | `file-text` | | |
+
+**Arbitrations** (cross-doc conflicts, decided here — these names are canonical):
+
+- "Call by phone" uses `phone` everywhere (calling the merchant, voice OTP fallback). `phone-call` is **banned**.
+- `eye` / `eye-off` mean ONLY reveal/hide (passwords, amounts). Ops read-only impersonation uses `venetian-mask` — never `eye`.
+- `cloud-off` is the only offline/queued icon; `wifi-off` is **banned** (docs/12 alternative rejected).
+- The `draft` pill (payout batches) is NOT a 9th StatusBadge status — it is an outline `ink-500` chip only; the 8 canonical statuses in §5 are unchanged.
 
 Rules: never two different icons for the same concept; never repurpose a status icon for navigation; status icons always pair with a text label (no color/icon-only meaning — accessibility).
 

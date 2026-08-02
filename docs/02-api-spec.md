@@ -28,6 +28,11 @@ This document defines the contract; the OpenAPI 3.1 file will be generated from 
 
 Stable error codes (initial set): `invalid_request`, `authentication_failed`, `permission_denied`, `rate_limited`, `idempotency_conflict`, `channel_unavailable`, `payer_not_found`, `insufficient_payer_funds`, `payer_rejected`, `payer_timeout`, `insufficient_balance`, `payout_limit_exceeded`, `provider_error`.
 
+Additional codes for the dashboard/app/public surfaces: `otp_invalid`, `otp_expired`, `totp_invalid`, `step_up_required` (action needs a fresh 2FA elevation — see `POST /auth/step_up`), `charge_not_cancelable` (charge already terminal), `resend_limit_reached` (public resend allowed once per charge), `link_inactive`, `invite_expired`, `last_owner` (cannot remove/downgrade the last Owner), `settlement_account_cooldown` (change pending 24 h hold), `export_expired` (signed download URL past 72 h).
+
+- **Internal ops API**: the ops console's internal surface lives at `https://api.ijimpay.com/internal/v1/*` and is specified separately in `docs/17-internal-api.md`; it is not part of this contract.
+- **Auth surfaces**: §2.9–2.14 (`/auth`, `/me`, `/merchant`, team, developer tooling, app support) are the first-party dashboard/mobile-app surface — session-token auth (cookie on web, refresh/access tokens in the app), not API keys. §2.15 (`/v1/public/*`) is unauthenticated/session-scoped for payers on `pay.ijimpay.com`. Everything else uses secret keys as above.
+
 ## 2. Resources & Endpoints
 
 ### 2.1 Charges (collections)

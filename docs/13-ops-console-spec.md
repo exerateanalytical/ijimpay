@@ -154,7 +154,7 @@ Left sidebar 240px (collapsible): Accueil `layout-dashboard` · File KYB `badge-
 
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
-| Impersonner (lecture seule) | `eye` | ops-admin | Ouvre OM-06 → `POST /internal/v1/merchants/{id}/impersonate` → ouvre app.ijimpay.com en session lecture seule 30 min, bandeau danger-600 « Session ops — lecture seule », intégralement journalisé |
+| Impersonner (lecture seule) | `venetian-mask` | ops-admin | Ouvre OM-06 → `POST /internal/v1/merchants/{id}/impersonate` → ouvre app.ijimpay.com en session lecture seule 30 min, bandeau danger-600 « Session ops — lecture seule », intégralement journalisé |
 | Suspendre le marchand | `octagon-pause` | ops-admin (maker), 2e approbateur ops-admin | Ouvre OM-05 (règle DC) — `POST /internal/v1/merchants/{id}/suspension_requests`; à l'approbation (O-17/OM-11) le statut passe à `suspended`, API du marchand renvoie `permission_denied`, e-mail marchand |
 | Réactiver le marchand | `circle-check` | ops-admin + DC | Même flux que Suspendre via OM-05 (variante réactivation) |
 | Modifier les limites | `pencil` | ops-admin (maker) ; DC si palier > 1 ou hausse > 20 % | Ouvre OM-04 → `POST /internal/v1/merchants/{id}/limit_change_requests` |

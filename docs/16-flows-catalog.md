@@ -597,7 +597,7 @@ Every push/email/SMS/WhatsApp message in the flows above. Channels per docs/08 �
 
 ## Icon additions needed (not in docs/07 §4 map — to be added there before use)
 
-`rotate-cw` (retry/redeliver — already used in docs/08 prose) · `scale` (reconciliation — flagged in docs/08 §B) · `smartphone` (enrolled devices — used in docs/08 A10) · `plus` (app FAB — used in docs/10) · `upload` (CSV/report import) · `siren` (risk flag/case — one icon for the concept across surfaces, already used by docs/13 O-12/O-13; `flag` is not used) · `circle-pause` / `circle-play` (subscription pause/resume) · `building-2` (business switcher) · `file-text` (statements/relevés) · `phone-call` (voice OTP fallback).
+`rotate-cw` (retry/redeliver — already used in docs/08 prose) · `scale` (reconciliation — flagged in docs/08 §B) · `smartphone` (enrolled devices — used in docs/08 A10) · `plus` (app FAB — used in docs/10) · `upload` (CSV/report import) · `siren` (risk flag/case — one icon for the concept across surfaces, already used by docs/13 O-12/O-13; `flag` is not used) · `circle-pause` / `circle-play` (subscription pause/resume) · `building-2` (business switcher) · `file-text` (statements/relevés) · `phone` (voice OTP fallback — arbitrated in docs/07 §4: `phone-call` is banned).
 
 ```
 INVENTORY: flows_merchant=36 flows_payer=10 flows_ops=10 flows_system=11 flows_developer=7 flows_total=74 notifications=35
