@@ -1,0 +1,22 @@
+# IjimPay
+
+API-first payment aggregator for Cameroon — accept MTN Mobile Money and Orange Money on websites, e-commerce shops, POS, ERPs and subscription platforms; send money out for payroll and supplier payments. Payment links, hosted checkout, merchant dashboard, and a merchant mobile app.
+
+**Status: documentation & planning phase.** No application code yet — the documents below are the spec of record.
+
+## Documents
+
+| Doc | Contents |
+|---|---|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | System architecture, stack choices, provider adapters, deployment |
+| [docs/00-overview.md](docs/00-overview.md) | Vision, personas, product surfaces, revenue model |
+| [docs/01-product-requirements.md](docs/01-product-requirements.md) | Functional requirements (MUST/SHOULD/MAY) per module |
+| [docs/02-api-spec.md](docs/02-api-spec.md) | API contract: charges, payouts, links, subscriptions, webhooks |
+| [docs/03-data-model.md](docs/03-data-model.md) | Database schema and double-entry ledger design |
+| [docs/04-mobile-app.md](docs/04-mobile-app.md) | Merchant mobile app spec (Flutter, Android-first) |
+| [docs/05-security-compliance.md](docs/05-security-compliance.md) | Security controls, KYC/AML, CEMAC regulatory path |
+| [docs/06-roadmap.md](docs/06-roadmap.md) | Phased delivery plan, risks, immediate next steps |
+
+## Stack (decided)
+
+Backend: TypeScript / NestJS · DB: PostgreSQL + Redis/BullMQ · Web: Next.js · Mobile: Flutter (Android-first) · API: REST, OpenAPI 3.1, webhooks.
