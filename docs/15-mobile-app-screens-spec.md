@@ -95,7 +95,7 @@ Deep links: `ijimpay://tx/{charge_id}` → M-27 · `ijimpay://batch/{id}` → M-
 
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
-| Continuer | — | — | `POST /auth/otp/request` (API addition) → M-04 ; désactivé tant que numéro invalide |
+| Continuer | — | — | `POST /auth/otp` (API addition, canonique docs/16 API-ADD-1) → M-04 ; désactivé tant que numéro invalide |
 
 - **Modals/sheets**: MS-01 on network/API error.
 - **States**: loading (button spinner, same width); error inline (invalid prefix), rate-limited → "Trop de tentatives. Réessayez dans {n} min."; offline → blocked-write MS-01.
@@ -113,7 +113,7 @@ Deep links: `ijimpay://tx/{charge_id}` → M-27 · `ijimpay://batch/{id}` → M-
 
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
-| Renvoyer le code | — | — | `POST /auth/otp/request` ; actif après 30 s ("Renvoyer dans 0:{ss}") |
+| Renvoyer le code | — | — | `POST /auth/otp` ; actif après 30 s ("Renvoyer dans 0:{ss}") |
 | Modifier le numéro | `pencil` | — | → M-03 (numéro pré-rempli) |
 
 - Auto-submit at 6th digit: `POST /auth/otp/verify` (API addition) → nouveau compte → M-05 ; compte existant → M-05 si pas de PIN sinon M-07.
@@ -449,7 +449,7 @@ Deep links: `ijimpay://tx/{charge_id}` → M-27 · `ijimpay://batch/{id}` → M-
 | Désactiver | `trash-2` | Owner/Admin/Finance | swipe/long-press → MS-06 |
 
 - **Modals/sheets**: M-22, MS-05, MS-06, MS-01.
-- **States**: loading (3 skeleton cards); empty (illustration + "Créez votre premier lien en 30 secondes" + [Créer un lien]); error retry; offline cached-read + queued items shown greyed with `cloud-off`.
+- **States**: loading (3 skeleton cards); empty (illustration + "Créez votre premier lien en 30 secondes" + [Créer un lien]); error retry; offline cached-read + queued items shown greyed with `cloud-off`; **flush-failed** (le serveur rejette un lien en file à la publication) : l'élément est conservé dans `outbox_queue` avec chip danger `triangle-alert` "Publication refusée — {raison FR}" + notification locale "Un lien hors ligne n'a pas pu être publié" ; tap → M-22 pré-rempli (modifier et réessayer) ; erreur `authentication_failed` (session expirée) → la file est conservée intacte et re-tentée après re-connexion M-07 ; erreur permanente (marchand désactivé / `permission_denied`) → chip "Publication impossible" + seule action [Supprimer de la file] (confirm inline).
 - **System**: Gestes: pull-to-refresh; swipe row reveals partager/QR/désactiver; long-press = same menu · Offline: cached-read; create is queued-write · FLAG_SECURE: no · Back: → M-12 · TalkBack: swipe actions duplicated in long-press menu with labels · Deep-link: `ijimpay://link/{id}` → M-24.
 - **Events**: outbox flush toast surfaces here.
 
@@ -460,18 +460,18 @@ Deep links: `ijimpay://tx/{charge_id}` → M-27 · `ijimpay://batch/{id}` → M-
 
 | Champ (FR) | Type | Validation | Défaut | Message d'erreur (FR) |
 |---|---|---|---|---|
-| Titre | texte | 2–60 caractères | vide | "Donnez un titre à votre lien (ex. : Gâteau d'anniversaire)." |
-| Montant | segmenté Fixe / Libre + champ montant si Fixe | Fixe : entier ≥ 100 FCFA ; Libre : montant minimum optionnel ≥ 100 | Fixe | "Montant minimum : 100 FCFA." |
-| Description (optionnel) | texte multiligne | ≤ 200 caractères | vide | — |
+| Titre | texte | 2–80 caractères (aligné D-14, docs/12) | vide | "Donnez un titre à votre lien (ex. : Gâteau d'anniversaire)." |
+| Montant | segmenté Fixe / Libre + champ montant si Fixe | Fixe : entier 100 – 5 000 000 FCFA (plafond payeur docs/14 C-02, comme D-14) ; Libre : montant minimum optionnel ≥ 100 | Fixe | "Montant entre 100 FCFA et 5 000 000 FCFA." |
+| Description (optionnel) | texte multiligne | ≤ 240 caractères (aligné D-14) | vide | "240 caractères maximum." |
 | Réutilisable | interrupteur | — | activé | — |
-| Expire le (optionnel) | date (`calendar`) | > aujourd'hui | jamais | "La date d'expiration doit être future." |
+| Expire le (optionnel) | date (`calendar`) | > maintenant (aligné D-14) | jamais | "La date d'expiration doit être future." |
 
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
 | Créer | — | idem | `POST /payment_links` `{title, amount, amount_type, reusable, expires_at}` → M-23 ; hors ligne → mise en file (`outbox_queue`) + toast "Lien enregistré — il sera publié dès le retour du réseau." puis fermeture |
 
 - **Modals/sheets**: MS-01 (server validation errors).
-- **States**: loading CTA; field errors; offline queued-write (only non-money write in the app).
+- **States**: loading CTA; field errors; offline queued-write (only non-money write in the app); **flush-failure au retour du réseau** : si le serveur rejette le lien (erreur de validation, session expirée, marchand désactivé), pas de toast succès — l'élément reste en file avec chip erreur sur M-21 (voir M-21 flush-failed), et la ré-ouverture de M-22 pré-remplie affiche l'erreur serveur en tête de formulaire ("Le serveur a refusé ce lien : {raison}") pour corriger puis réessayer.
 - **System**: Gestes: drag-down dismiss (confirm if dirty: "Abandonner ce lien ?") · Offline: queued-write · FLAG_SECURE: no · Back: dismiss (same confirm) · TalkBack: switch "Réutilisable, {activé|désactivé}" · Deep-link: n/a.
 - **Events**: `link_created` (+ queued variant).
 
@@ -623,7 +623,7 @@ Deep links: `ijimpay://tx/{charge_id}` → M-27 · `ijimpay://batch/{id}` → M-
 | Rejeter | `x` | Owner/Admin (≠ maker) | ouvre MS-09 (raison obligatoire) → `POST /payout_batches/{id}/reject` (API addition) |
 
 - **Modals/sheets**: MS-09, MS-01.
-- **States**: loading; already-decided ("Ce lot a déjà été {approuvé par {nom}|rejeté}." read-only); maker read-only; provider down for batch channel: approve disabled + "Orange Money est indisponible — la validation reprendra dès le rétablissement."; offline: read from cache, both actions blocked-write.
+- **States**: loading; already-decided ("Ce lot a déjà été {approuvé par {nom}|rejeté}." read-only); maker read-only; provider down for batch channel: approve disabled + "Orange Money est indisponible — la validation reprendra dès le rétablissement."; **approval-locked — PIN réinitialisé** (docs/16 F-004 : verrou 24 h après réinitialisation du PIN) : Banner warning "Approbations désactivées pendant 24 h après réinitialisation du PIN — disponibles à {heure, date}." + [Approuver] désactivé ([Rejeter] reste actif); **approval-locked — appareil récent** (docs/16 F-031 : délai de maturation 24 h après enrôlement de l'appareil) : Banner warning "Cet appareil a été autorisé il y a moins de 24 h — les validations seront possibles à {heure, date}." + [Approuver] désactivé; offline: read from cache, both actions blocked-write.
 - **System**: Gestes: pull-to-refresh · Offline: cached-read · FLAG_SECURE: **yes** · Back: → M-29 · TalkBack: hints "Avertissement : {texte}" · Deep-link: push `payout_batch.pending_approval` + `ijimpay://batch/{id}`.
 - **Events**: —
 
@@ -639,7 +639,7 @@ Deep links: `ijimpay://tx/{charge_id}` → M-27 · `ijimpay://batch/{id}` → M-
 | Annuler | `x` | — | → M-30 |
 
 - **Modals/sheets**: MS-01.
-- **States**: success (check, no confetti, sober); `insufficient_balance` → "Portefeuille insuffisant ({manque} FCFA manquants)." + [Approvisionner] → M-35; unenrolled device: "Cet appareil n'est pas autorisé pour les validations. Ajoutez-le dans Menu → Sécurité → Appareils."; biometric fail ×3 → fallback PIN; offline blocked-write.
+- **States**: success (check, no confetti, sober); `insufficient_balance` → "Portefeuille insuffisant ({manque} FCFA manquants)." + [Approvisionner] → M-35; unenrolled device: "Cet appareil n'est pas autorisé pour les validations. Ajoutez-le dans Menu → Sécurité → Appareils."; **approval-locked** (miroir des verrous M-30, refus serveur si contournés) : PIN réinitialisé < 24 h → écran bloqué "Approbations désactivées pendant 24 h après réinitialisation du PIN." (docs/16 F-004) ; appareil enrôlé < 24 h → "Cet appareil est trop récent — validations possibles à {heure, date}." (docs/16 F-031) ; dans les deux cas [Confirmer] masqué, seul [Annuler] → M-30; biometric fail ×3 → fallback PIN; offline blocked-write.
 - **System**: Gestes: aucun · Offline: blocked-write · FLAG_SECURE: **yes** · Back: → M-30 (aucune action partielle possible : l'approbation est atomique) · TalkBack: restatement read first, buttons after · Deep-link: n/a.
 - **Events**: `batch_approved`; push `payout_batch.completed` follows asynchronously.
 
@@ -784,7 +784,7 @@ Deep links: `ijimpay://tx/{charge_id}` → M-27 · `ijimpay://batch/{id}` → M-
 | Inviter un membre | `plus` | Owner/Admin | ouvre MS-10 |
 | Changer le rôle | `shield` | Owner/Admin | long-press → sheet rôle (mêmes descriptions que MS-10) → `PATCH /members/{id}` (API addition) |
 | Retirer | `trash-2` | Owner/Admin | long-press → MS-11 ; impossible sur le dernier Owner ("Impossible de retirer le dernier propriétaire.") |
-| Renvoyer l'invitation | `rotate-cw` | Owner/Admin | sur invite en attente → `POST /invitations/{id}/resend` (API addition) |
+| Renvoyer l'invitation | `rotate-cw` | Owner/Admin | sur invite en attente → `POST /invites/{id}/resend` (API addition, même chemin que docs/12) |
 
 - **Modals/sheets**: MS-10, MS-11, MS-04, MS-01.
 - **States**: loading; empty (solo Owner): "Vous travaillez seul pour l'instant. Invitez votre équipe."; permission-denied n/a (hidden); offline cached-read, writes blocked.
@@ -1037,7 +1037,7 @@ Deep links: `ijimpay://tx/{charge_id}` → M-27 · `ijimpay://batch/{id}` → M-
 | Téléphone ou e-mail | tel/email | numéro CM valide ou e-mail RFC | vide | "Entrez un numéro ou un e-mail valide." |
 | Rôle | radio (4) | requis | Lecture | "Choisissez un rôle." |
 
-- [Envoyer l'invitation] → `POST /invitations` (API addition) → toast "Invitation envoyée à {destinataire}". Déjà membre → "Cette personne fait déjà partie de l'équipe."
+- [Envoyer l'invitation] → `POST /invites` (API addition, canonique docs/16 API-ADD-8) → toast "Invitation envoyée à {destinataire}". Déjà membre → "Cette personne fait déjà partie de l'équipe."
 
 ### MS-11 — Retirer le membre / Remove member confirm
 - "Retirer {nom} de {marchand} ? Son accès sera coupé immédiatement." [Retirer] destructive → `DELETE /members/{id}` (API addition) · [Annuler]. Dernier Owner → action indisponible (règle affichée).
@@ -1087,10 +1087,10 @@ Deep links: `ijimpay://tx/{charge_id}` → M-27 · `ijimpay://batch/{id}` → M-
 
 ## API additions needed (method + path — referenced above, absent from docs/02)
 
-- `POST /auth/otp/request` · `POST /auth/otp/verify` · `POST /auth/pin/set` · `POST /auth/token/refresh` · `POST /auth/logout` · `PATCH /me`
+- Auth — canonical list is docs/16 §API additions (API-ADD-1); this doc reuses it, not a third set: `POST /auth/otp` · `POST /auth/otp/verify` (both = API-ADD-1), plus app-only extensions `POST /auth/pin/set` · `POST /auth/token/refresh` · `POST /auth/logout` · `PATCH /me`
 - `GET /merchant` · `PATCH /merchant` · `POST /merchant/logo`
 - `GET /kyb_documents` · `POST /kyb_documents`
-- `GET /members` · `PATCH /members/{id}` · `DELETE /members/{id}` · `POST /invitations` · `POST /invitations/{id}/resend`
+- Team — canonical list is docs/16 API-ADD-8 (shared with docs/12): `GET /members` · `PATCH /members/{id}` · `DELETE /members/{id}` · `POST /invites` · `POST /invites/{id}/resend`
 - `GET /devices` · `POST /devices` (FCM token) · `POST /devices/{id}/enroll` · `DELETE /devices/{id}` · `GET /sessions` · `DELETE /sessions/{id}`
 - `GET /notifications` · `POST /notifications/mark_all_read` · `GET /notification_preferences` · `PUT /notification_preferences`
 - `GET /app/config` (min version, maintenance, USSD codes, FAQ manifest, feature flags)
@@ -1101,7 +1101,7 @@ Deep links: `ijimpay://tx/{charge_id}` → M-27 · `ijimpay://batch/{id}` → M-
 - `GET /receipts/{charge_id}.pdf` · `GET /settlements/{id}/statement.pdf`
 - `GET /channels/{channel}/history`
 - `POST /support/tickets`
-- Push event types (server-side, on top of docs/02 events): `kyb.decision`, `security.new_device`, `team.member_changed`.
+- Push event types (server-side, on top of docs/02 events): `kyb.decision`, `security.new_device`, `team.member_changed`, `payout_batch.pending_approval` (maker–checker: batch awaits an approver — routed per the push table to M-30), `payout_batch.partially_failed` (batch finished with ≥ 1 failed item — routed to M-29 Historique).
 
 ## Icon additions needed (not in docs/07 §4 map)
 

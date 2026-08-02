@@ -1,5 +1,7 @@
 # IjimPay — Hosted Checkout, Payment Links & Receipts: Every Screen & State
 
+> **Superseded for detail**: fully expanded in [docs/14](14-checkout-pages-spec.md). This doc remains the overview.
+
 Customer-facing surface (`pay.ijimpay.com`). The payer is NOT our user — assume a low-end Android phone, 3G, possibly first time paying online. One column, max 420px, FR default with EN toggle (`globe`), merchant logo + name always visible, "Sécurisé par IjimPay `lock`" footer on every screen. Page weight < 150 KB; no JS required for the read-only states (receipt, expired).
 
 ---

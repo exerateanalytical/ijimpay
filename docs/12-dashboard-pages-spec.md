@@ -5,7 +5,7 @@ Status: Draft v1 · Supersedes `docs/08-web-screens.md` §A (strictly more detai
 Conventions used in this document:
 - All UI copy is French-first; EN parity exists via the `globe` switcher but only FR strings are specified here (EN is a translation task, not a design decision).
 - Amounts always rendered `12 500 FCFA` (thin non-breaking space thousands, currency after).
-- Roles: **Owner, Admin, Developer, Finance, Viewer**. "Tous" = all five. Viewer sees read-only pages with action buttons **hidden** (not disabled).
+- Roles: **Owner, Admin, Developer, Finance, Viewer**. "Tous" = all five. Viewer sees read-only pages with action buttons **hidden** (not disabled). Exception (per F-013 docs/16): l'export (lecture seule) est permis au Viewer.
 - StatusBadge statuses (the only 8): `succeeded`, `pending`, `failed`, `expired`, `refunded`, `processing`, `pending_approval` (warning-600 **outlined** per 07 collision rule 2), plus `draft` rendered as ink-500 outline pill (non-status pill, not a StatusBadge — used only for payout batches).
 - `accent-500` never appears in any screen below.
 - Every list uses cursor pagination (`?limit=20&starting_after=<id>`, `has_more`).
@@ -62,6 +62,8 @@ Left → right:
 3. Provider degraded (warning-600, from `GET /channels`): "Les paiements {Orange|MTN} peuvent être lents actuellement." Auto-dismisses when status returns `operational`.
 4. Offline detection (danger-600): "Connexion perdue — reconnexion en cours…" (navigator offline event; retries every 5 s).
 5. Webhook endpoint failing > 24 h (warning, Developer/Admin/Owner only): "Un point de terminaison webhook échoue depuis 24 h." → `/developers/webhooks`.
+6. **Compte suspendu** (danger-600, permanent, non fermable — déclenché par l'ops via docs/13 OM-05 / F-048): « **Compte suspendu — contactez le support.** » Le dashboard passe intégralement en **lecture seule** : toutes les actions de mouvement d'argent (encaisser, payer, rembourser, approvisionner, approuver) et toutes les mutations sont **masquées** (mêmes règles d'affichage que Viewer, pour tous les rôles) ; toute mutation tentée par API renvoie `permission_denied`. Suspension partielle (décaissements uniquement) : les encaissements restent actifs, la section Décaissements est masquée avec bandeau warning.
+7. **Session ops — impersonation lecture seule** (danger-600, permanent, non fermable — ouverte par l'ops via docs/13 OM-06): « **Session ops — lecture seule.** » Toutes les mutations sont désactivées (boutons masqués, mêmes règles que Viewer sur toutes les pages, sections Développeurs incluses en lecture) ; la session expire automatiquement après **30 min** (retour à un écran « Session ops terminée. ») ; chaque page vue est journalisée côté ops.
 
 Live updates: WebSocket channel per merchant+mode; fallback 15 s polling on D-11 and D-12 only.
 
@@ -158,6 +160,7 @@ Live updates: WebSocket channel per merchant+mode; fallback 15 s polling on D-11
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
 | Envoyer le lien | — (primary) | public | `POST /auth/password/forgot` (API addition). Réponse identique que le compte existe ou non (anti-énumération) |
+| Je n'ai plus accès à mon numéro | — (link, sous le formulaire) | public | → D-49 (récupération de compte, F-033) |
 
 - **Modals/drawers/sheets opened**: none.
 - **States**: succès (toujours) « Si un compte existe, vous recevrez un lien de réinitialisation par SMS ou e-mail d'ici quelques minutes. »; rate-limited.
@@ -342,13 +345,13 @@ Live updates: WebSocket channel per merchant+mode; fallback 15 s polling on D-11
 
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
-| Exporter | `download` | Owner, Admin, Finance | ouvre DM-35 (CSV; > 10 000 lignes → export asynchrone par e-mail) |
+| Exporter | `download` | Owner, Admin, Finance, Viewer | ouvre DM-35 (CSV; > 10 000 lignes → export asynchrone par e-mail) |
 | Vues enregistrées : Aujourd'hui / Échecs récents | `list-filter` | Tous | applique un jeu de filtres prédéfini (stocké côté client) |
 | Ouvrir le détail | — (row click) | Tous | ouvre DM-01 (URL `/transactions/:id`, liste conservée derrière) |
 
 - **Modals/drawers/sheets opened**: DM-01, DM-35.
 - **States**: loading (skeleton 10 lignes); empty « Aucune transaction — créez un lien de paiement pour commencer. » + CTA `/links/new`; empty (filtres actifs) « Aucun résultat pour ces filtres. » + « Réinitialiser les filtres »; error « Impossible de charger les transactions. Réessayer »; pending rows: mise à jour en direct (websocket/poll 15 s) avec `clock` pulsant.
-- **Events/notifications triggered**: export prêt → e-mail avec lien de téléchargement (expire 48 h) + cloche.
+- **Events/notifications triggered**: export prêt → e-mail avec lien de téléchargement signé (expire 72 h, N-09) + cloche.
 
 ### D-13 — Liens de paiement / Payment links
 - **Route**: `/links` · **Icon**: lucide `link` · **Access**: Tous · **Purpose**: manage all payment links, their performance and sharing.
@@ -364,7 +367,7 @@ Live updates: WebSocket channel per merchant+mode; fallback 15 s polling on D-11
 | Afficher le QR | `qr-code` | Tous | ouvre DM-05 |
 | Partager | `share-2` | Tous | ouvre DM-06 |
 | Modifier | `pencil` | Owner, Admin, Finance | → D-15 (panneau édition) |
-| Désactiver | `trash-2` | Owner, Admin | ouvre DM-07 |
+| Désactiver | `trash-2` | Owner, Admin, Finance (le créateur du lien peut désactiver les siens, tout rôle créateur — F-011/docs/15) | ouvre DM-07 |
 | Basculer vue cartes/tableau | `layers` | Tous | préférence locale |
 
 - **Modals/drawers/sheets opened**: DM-05, DM-06, DM-07.
@@ -380,9 +383,12 @@ Live updates: WebSocket channel per merchant+mode; fallback 15 s polling on D-11
 | Champ (FR) | Type | Validation | Défaut | Message d'erreur (FR) |
 |---|---|---|---|---|
 | Titre | text | 2–80 car. | vide | « Donnez un titre à votre lien. » |
-| Type de montant | radio: Montant fixe / Montant libre | requis | Fixe | — |
-| Montant | number FCFA | entier, 100 – 10 000 000 | vide | « Montant entre 100 FCFA et 10 000 000 FCFA. » |
+| Type de lien | radio: Simple / Catalogue (produits) | requis | Simple | — |
+| Type de montant (si Simple) | radio: Montant fixe / Montant libre | requis | Fixe | — |
+| Montant | number FCFA | entier, 100 – 5 000 000 (plafond payeur docs/14 C-02; le plafond effectif peut être réduit par le tier) | vide | « Montant entre 100 FCFA et 5 000 000 FCFA. » |
 | Montant minimum (si libre) | number FCFA | entier ≥ 100 | 100 | « Minimum 100 FCFA. » |
+| Produits (si Catalogue) | répéteur 1–20 lignes: nom (2–80 car.) + image (JPG/PNG ≤ 2 Mo, facultatif) + prix (entier, 100 – 5 000 000 FCFA) | ≥ 1 produit valide | 1 ligne vide | « Ajoutez au moins un produit (nom et prix). » · « Prix entre 100 FCFA et 5 000 000 FCFA. » |
+| Sélection de quantité (si Catalogue) | switch — le payeur choisit la quantité par produit (rendu par C-03, docs/14) | — | activé | — |
 | Description (facultatif) | textarea | ≤ 240 car. | vide | « 240 caractères maximum. » |
 | Image (facultatif) | fichier | JPG/PNG ≤ 2 Mo | — | « Image trop lourde (2 Mo max). » |
 | Réutilisable | switch: Réutilisable / Usage unique | — | Réutilisable | — |
@@ -415,7 +421,7 @@ Live updates: WebSocket channel per merchant+mode; fallback 15 s polling on D-11
 | Copier l'URL | `copy` | Tous | presse-papiers |
 | Afficher le QR | `qr-code` | Tous | DM-05 |
 | Partager | `share-2` | Tous | DM-06 |
-| Désactiver | `trash-2` | Owner, Admin | DM-07 → `POST /payment_links/{id}/deactivate` |
+| Désactiver | `trash-2` | Owner, Admin, Finance (ou créateur du lien) | DM-07 → `POST /payment_links/{id}/deactivate` |
 
 - **Modals/drawers/sheets opened**: DM-05, DM-06, DM-07, DM-01 (clic ligne transaction).
 - **States**: loading; lien introuvable → D-45 (404); désactivé — bandeau ink « Ce lien est désactivé. Il ne peut plus recevoir de paiements. »; permission: Viewer sans panneau d'édition.
@@ -495,7 +501,7 @@ Live updates: WebSocket channel per merchant+mode; fallback 15 s polling on D-11
 |---|---|---|---|
 | Nouveau paiement | `send` (primary) | Owner, Admin, Finance | → D-20 |
 | Ouvrir un lot | — (row click) | Tous | → D-24 |
-| Exporter | `download` | Owner, Admin, Finance | DM-35 |
+| Exporter | `download` | Owner, Admin, Finance, Viewer | DM-35 |
 
 - **Modals/drawers/sheets opened**: DM-16, DM-35.
 - **States**: loading; empty « Aucun paiement sortant. Payez un fournisseur ou lancez une paie en quelques clics. » + CTA; canal indisponible (`GET /channels` = down) — note `triangle-alert` « Orange Money est indisponible — les paiements Orange sont suspendus. »; permission: Viewer/Developer sans « Nouveau paiement ».
@@ -520,7 +526,7 @@ Live updates: WebSocket channel per merchant+mode; fallback 15 s polling on D-11
 
 | Champ (FR) | Type | Validation | Défaut | Message d'erreur (FR) |
 |---|---|---|---|---|
-| Fichier CSV | drag-drop (`file-up`) | .csv ≤ 5 Mo, ≤ 5 000 lignes, UTF-8 | — | « Fichier invalide : CSV UTF-8, 5 000 lignes max. » |
+| Fichier CSV | drag-drop (`file-up`) | .csv ≤ 5 Mo, ≤ 1 000 lignes (v1, aligné F-015), UTF-8 | — | « Fichier invalide : CSV UTF-8 requis. » · > 1 000 lignes : « Fichier trop grand — 1 000 lignes maximum, divisez le fichier. » |
 | Liste de paie enregistrée | select | — | — | — |
 
 - **Actions**:
@@ -594,12 +600,12 @@ Live updates: WebSocket channel per merchant+mode; fallback 15 s polling on D-11
 
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
-| Confirmer le paiement | `send` (primary; jamais focus par défaut) | Owner, Admin, Finance | Individuel: `POST /payouts` (Idempotency-Key) · En masse: `POST /payout_batches` → statut `draft` puis `pending_approval` si requis → D-24 |
+| Confirmer le paiement | `send` (primary; jamais focus par défaut) | Owner, Admin, Finance | Individuel: confirmation restatée « Envoyer {montant} FCFA à {nom} ({numéro}) ? » (ConfirmModal docs/07 §5) + re-prompt 2FA DM-28 (parité avec MS-08 mobile) → `POST /payouts` (Idempotency-Key) → succès/`processing`: → D-19 (onglet Paiements) avec toast « Paiement envoyé à {nom}. » et la ligne en tête · `pending_approval`: → D-19 avec bandeau « En attente d'approbation par un Admin ou le Owner. » · En masse: `POST /payout_batches` → statut `draft` puis `pending_approval` si requis → D-24 |
 | Approvisionner | `plus-circle` | Owner, Admin, Finance | DM-16 |
 | Retour | `arrow-left` | idem | étape précédente (état conservé) |
 
-- **Modals/drawers/sheets opened**: DM-16.
-- **States**: solde insuffisant — bouton « Confirmer » désactivé + bandeau danger; canal down — éléments concernés marqués `triangle-alert` « suspendu — sera réessayé »; erreur idempotence (rejeu) — redirection vers le lot existant + toast « Ce lot existe déjà. ».
+- **Modals/drawers/sheets opened**: DM-16, DM-28 (individuel).
+- **States**: solde insuffisant — bouton « Confirmer » désactivé + bandeau danger; canal down — éléments concernés marqués `triangle-alert` « suspendu — sera réessayé »; erreur idempotence (rejeu) — redirection vers le lot existant + toast « Ce lot existe déjà. »; échec individuel au submit (`provider_error` sur `POST /payouts`) — la page reste sur D-23 avec bloc danger « Le paiement n'a pas pu être envoyé ({failure_code humanisé}). Aucune somme n'a été débitée. » + boutons « Réessayer » (rejoue avec la même Idempotency-Key) et « Voir mes paiements » → D-19; si le payout est créé puis échoue côté provider, il apparaît `failed` dans D-19 avec retry DM-12.
 - **Events/notifications triggered**: si `pending_approval`: push + e-mail + cloche aux approbateurs « Un lot de paiements attend votre approbation » (matrice 08 §C).
 
 ### D-24 — Détail du lot / Payout batch detail
@@ -617,7 +623,7 @@ Live updates: WebSocket channel per merchant+mode; fallback 15 s polling on D-11
 | Télécharger le rapport | `download` | Tous | CSV/PDF du lot (`GET /payout_batches/{id}/report` — **API additions**) |
 
 - **Modals/drawers/sheets opened**: DM-08, DM-09, DM-12.
-- **States**: `processing` — barre de progression + compte en direct « 32/50 traités »; `pending_approval` vu par le créateur — panneau remplacé par « En attente d'approbation par un Admin ou le Owner. »; `partially_failed` — bandeau warning avec résumé; rejeté — bandeau danger « Rejeté par {nom} : “{motif}” ».
+- **States**: `processing` — barre de progression + compte en direct « 32/50 traités »; `pending_approval` vu par le créateur — panneau remplacé par « En attente d'approbation par un Admin ou le Owner. »; `pending_approval` (expiration, aligné F-016) — bandeau warning pour approbateurs et créateur « Sans approbation, ce lot expirera le {date} (7 jours). » avec compte à rebours en jours ; rappel automatique N-12 renvoyé aux approbateurs à 48 h ; à 7 jours sans approbation le lot repasse en `draft` + bandeau au créateur « Lot expiré sans approbation — repassé en brouillon. » (+ cloche); `partially_failed` — bandeau warning avec résumé; rejeté — bandeau danger « Rejeté par {nom} : “{motif}” ».
 - **Events/notifications triggered**: approbation → traitement; fin de lot → push + e-mail (rapport joint) « Lot terminé : 50/50 réussis » ou « Lot partiellement échoué »; rejet → push + cloche au créateur.
 
 ### D-25 — Bénéficiaires / Beneficiaries
@@ -688,7 +694,7 @@ Live updates: WebSocket channel per merchant+mode; fallback 15 s polling on D-11
 
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
-| Mettre en pause / Reprendre | `clock` | Owner, Admin, Finance | DM-15 → `POST /subscriptions/{id}/pause` ou `/resume` |
+| Mettre en pause / Reprendre | `circle-pause` / `circle-play` | Owner, Admin, Finance | DM-15 → `POST /subscriptions/{id}/pause` ou `/resume` |
 | Annuler l'abonnement | `trash-2` | Owner, Admin | DM-14 → `POST /subscriptions/{id}/cancel` |
 | Envoyer un lien de paiement | `message-circle` | Owner, Admin, Finance | relance manuelle: SMS/WhatsApp avec lien pour la facture ouverte (`POST /invoices/{id}/send_link` — **API additions**) |
 
@@ -706,7 +712,7 @@ Live updates: WebSocket channel per merchant+mode; fallback 15 s polling on D-11
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
 | Approvisionner | `plus-circle` (primary) | Owner, Admin, Finance | ouvre DM-16 → `POST /topups` |
-| Exporter le relevé | `download` | Owner, Admin, Finance | DM-35 (CSV/PDF par période) |
+| Exporter le relevé | `download` | Owner, Admin, Finance, Viewer | DM-35 (CSV/PDF par période) |
 | Ouvrir l'objet lié | — (row click) | Tous | DM-01 (charge) ou navigation payout/settlement |
 
 - **Modals/drawers/sheets opened**: DM-16, DM-35, DM-01.
@@ -757,10 +763,11 @@ Live updates: WebSocket channel per merchant+mode; fallback 15 s polling on D-11
 |---|---|---|---|
 | Créer une clé secrète | `key-round` (primary, par section) | Owner, Admin, Developer | ouvre DM-18 → `POST /api_keys` (**API additions**) → révélation unique |
 | Copier la clé publiable | `copy` | Owner, Admin, Developer | presse-papiers |
+| Faire tourner la clé | `rotate-cw` (par ligne de clé secrète) | Owner, Admin, Developer | ouvre DM-18 (variante rotation : nom pré-rempli + fenêtre de grâce 0 / 24 h / 72 h) → `POST /api_keys/{id}/rotate` (**API additions**) → révélation unique de la nouvelle clé ; l'ancienne clé reste valide pendant la fenêtre puis est auto-révoquée (F-024) |
 | Révoquer | `trash-2` | Owner, Admin, Developer | ouvre DM-19 → `DELETE /api_keys/{id}` (**API additions**) |
 
 - **Modals/drawers/sheets opened**: DM-18, DM-19.
-- **States**: section réelle verrouillée tant que tier 0 — « Les clés réelles seront disponibles après vérification. » + CTA `/settings/verification`; loading; error standard; permission-denied (Finance/Viewer): page masquée du menu; accès direct → écran « Accès réservé aux développeurs. Demandez au propriétaire du compte. ».
+- **States**: clé en rotation — bandeau warning sur la ligne de l'ancienne clé « Ancienne clé expire le {date}. » (visible jusqu'à l'auto-révocation); section réelle verrouillée tant que tier 0 — « Les clés réelles seront disponibles après vérification. » + CTA `/settings/verification`; loading; error standard; permission-denied (Finance/Viewer): page masquée du menu; accès direct → écran « Accès réservé aux développeurs. Demandez au propriétaire du compte. ».
 - **Events/notifications triggered**: création/révocation de clé → e-mail sécurité aux Owner/Admin + cloche.
 
 ### D-33 — Webhooks / Webhooks
@@ -793,10 +800,11 @@ Live updates: WebSocket channel per merchant+mode; fallback 15 s polling on D-11
 | Relivrer | `rotate-cw` (par ligne) | Owner, Admin, Developer | `POST /webhook_deliveries/{id}/redeliver` (**API additions**) |
 | Modifier | `pencil` | Owner, Admin, Developer | ouvre DM-20 pré-rempli |
 | Régénérer le secret | `key-round` | Owner, Admin | confirm + DM-21 (nouveau secret, révélation unique) — `POST /webhook_endpoints/{id}/roll_secret` (**API additions**) |
+| Réactiver | — (primary, dans le bandeau désactivé uniquement) | Owner, Admin, Developer | `POST /webhook_endpoints/{id}/enable` (**API additions**, F-027/F-058) → endpoint réactivé, toast « Point de terminaison réactivé. » + rappel « Relivrez les événements manqués depuis /developers/events (journal 90 jours). » |
 | Voir l'événement | — (row click) | Owner, Admin, Developer | ouvre DM-31 |
 
 - **Modals/drawers/sheets opened**: DM-20, DM-21, DM-31.
-- **States**: en échec — bandeau warning avec dernière erreur (« Timeout après 10 s » / « HTTP 500 ») et prochaine relance; loading; introuvable → D-45.
+- **States**: en échec — bandeau warning avec dernière erreur (« Timeout après 10 s » / « HTTP 500 ») et prochaine relance; auto-désactivé (7 jours d'échecs, F-058) — bandeau danger « Point de terminaison désactivé le {date} après 7 jours d'échecs. Les événements ne sont plus livrés. » + bouton [Réactiver] (cf. Actions); loading; introuvable → D-45.
 - **Events/notifications triggered**: none.
 
 ### D-35 — Événements / Events
@@ -863,15 +871,16 @@ Live updates: WebSocket channel per merchant+mode; fallback 15 s polling on D-11
 | Ville / Adresse | text | mêmes règles D-07 | actuel | « Entrez l'adresse. » |
 | E-mail de contact | email | RFC 5322 | actuel | « Adresse e-mail invalide. » |
 | Logo | fichier | JPG/PNG carré ≥ 256 px, ≤ 1 Mo | actuel | « Logo carré, 1 Mo max. » |
+| Seuil d'approbation des paiements sortants (FCFA) | number FCFA (carte « Approbation des paiements » sous le profil; PRD docs/01 §4 « configurable thresholds », référencé par D-23/F-014/F-016 « si seuil dépassé ») | entier ≥ 0 (0 = tout paiement requiert approbation) ; les paiements créés par Finance requièrent toujours l'approbation quel que soit le seuil | 500 000 | « Entrez un seuil en FCFA (0 pour tout approuver). » |
 
 - **Actions**:
 
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
-| Enregistrer | — (primary) | Owner, Admin | `PATCH /merchant` (**API additions**) |
+| Enregistrer | — (primary) | Owner, Admin | `PATCH /merchant` (**API additions**) ; si le seuil d'approbation a été modifié : re-prompt 2FA DM-28 obligatoire avant l'appel + e-mail sécurité aux Owner/Admin « Seuil d'approbation modifié : {ancien} → {nouveau} FCFA » |
 | Supprimer le logo | `trash-2` | Owner, Admin | confirm inline « Retirer le logo ? Le checkout affichera le nom seul. » |
 
-- **Modals/drawers/sheets opened**: none.
+- **Modals/drawers/sheets opened**: DM-28 (si seuil modifié).
 - **States**: loading; note: raison sociale/forme juridique verrouillées après vérification (tooltip « Modifiable via le support — donnée vérifiée »); error standard.
 - **Events/notifications triggered**: none.
 
@@ -1051,6 +1060,31 @@ Live updates: WebSocket channel per merchant+mode; fallback 15 s polling on D-11
 
 - **Modals/drawers/sheets opened**: none. · **States**: formulaires en cours — brouillon conservé en localStorage 15 min (liens, paiements) et restauré avec toast « Brouillon restauré. ». · **Events/notifications triggered**: none.
 
+### D-49 — Récupération de compte / Account recovery
+- **Route**: `/account-recovery` · **Icon**: lucide `life-buoy` · **Access**: public (depuis D-04 « Je n'ai plus accès à mon numéro ») · **Purpose**: re-verify identity when the user lost phone/SIM and/or 2FA, per F-033 (docs/16) — email OTP + ID upload → ops manual review.
+- **Layout zones**: centered card; 3 sous-étapes avec points de progression (E-mail → Pièce d'identité → Envoyé); retour `arrow-left` vers `/forgot-password`.
+- **Data displayed**: statut de la demande en cours (`POST /auth/recovery` — API addition): `envoyée | en revue | approuvée | refusée (motif)`.
+- **Inputs**:
+
+| Champ (FR) | Type | Validation | Défaut | Message d'erreur (FR) |
+|---|---|---|---|---|
+| Adresse e-mail du compte | email | RFC 5322; doit être l'e-mail au dossier (réponse anti-énumération identique) | vide | « Adresse e-mail invalide. » |
+| Code reçu par e-mail | 6 chiffres | 6 chiffres, expire 10 min, 5 essais | vide | « Code invalide ou expiré. » |
+| Nouveau numéro de téléphone | tel `+237` | préfixe mobile CM valide | vide | « Ce numéro n'est pas un mobile camerounais valide. » |
+| Pièce d'identité du dirigeant (CNI/passeport) | fichier (`upload`) | PDF/JPG/PNG ≤ 10 Mo; doit correspondre au dossier KYB | — | « Fichier trop lourd (10 Mo max) ou format non accepté (PDF, JPG, PNG). » |
+
+- **Actions**:
+
+| Action (FR) | Icône | Rôle requis | Comportement |
+|---|---|---|---|
+| Recevoir le code par e-mail | `message-square` | public | `POST /auth/recovery` (API addition) — étape 1; cooldown 30 s « Renvoyer (28 s) » |
+| Envoyer la demande | — (primary) | public | `POST /auth/recovery` (API addition, multipart) → écran « Demande envoyée » ; la revue ops (SLA 24 h) compare aux `kyb_documents` (F-033) |
+| Retour à la connexion | — (link) | public | → D-01 |
+
+- **Modals/drawers/sheets opened**: none.
+- **States**: upload en cours (barre de progression); demande envoyée / en revue — écran « **Demande en cours de revue.** Notre équipe vérifie votre identité (sous 24 h ouvrées). Vous serez prévenu par e-mail. »; refusée — carte danger « Demande refusée : {motif FR exact des ops}. » + bouton « Soumettre une nouvelle demande » (re-upload); approuvée — le numéro est mis à jour, toutes les sessions et appareils sont révoqués, la 2FA devra être réactivée à la prochaine connexion et les paiements sortants sont verrouillés 48 h (bandeau sur D-01 : « Compte récupéré — reconnectez-vous avec votre nouveau numéro. »); compte sans e-mail au dossier — écran « Contactez le support avec votre pièce d'identité » (pas de flux automatisé); rate-limited.
+- **Events/notifications triggered**: décision → e-mail au demandeur; approbation → N-22 à tous les contacts Owner/Admin (F-033) + e-mail/SMS sécurité.
+
 ---
 
 ## 2. Modals & Drawers/Sheets
@@ -1116,7 +1150,7 @@ Live updates: WebSocket channel per merchant+mode; fallback 15 s polling on D-11
 
 | Champ (FR) | Type | Validation | Défaut | Message d'erreur (FR) |
 |---|---|---|---|---|
-| Montant | number FCFA | entier 100 – 10 000 000 | vide | « Montant entre 100 FCFA et 10 000 000 FCFA. » |
+| Montant | number FCFA | entier 100 – 5 000 000 (plafond payeur docs/14 C-02; réduit par le plafond du tier le cas échéant) | vide | « Montant entre 100 FCFA et 5 000 000 FCFA. » |
 | Téléphone du client | tel `+237` | préfixe MTN/Orange; auto-détecte le canal | vide (pré-rempli depuis D-17/D-18) | « Numéro mobile money invalide. » |
 | Canal | segmented MTN / Orange | requis (auto) | auto | — |
 | Description (facultatif) | text | ≤ 120 car. | vide | — |
@@ -1173,7 +1207,7 @@ Live updates: WebSocket channel per merchant+mode; fallback 15 s polling on D-11
 
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
-| Désactiver | `trash-2` (destructive, non focus) | Owner, Admin | `POST /payment_links/{id}/deactivate` → toast « Lien désactivé. » |
+| Désactiver | `trash-2` (destructive, non focus) | Owner, Admin, Finance (ou créateur du lien) | `POST /payment_links/{id}/deactivate` → toast « Lien désactivé. » |
 | Annuler | — (focus par défaut) | idem | ferme |
 
 - **Confirm rules**: destructive → bouton danger, jamais focus par défaut. · **States**: loading bouton.
@@ -1203,7 +1237,7 @@ Live updates: WebSocket channel per merchant+mode; fallback 15 s polling on D-11
 
 | Champ (FR) | Type | Validation | Défaut | Message d'erreur (FR) |
 |---|---|---|---|---|
-| Motif du rejet | textarea | 5–300 car. | vide | « Expliquez le motif (5 caractères minimum). » |
+| Motif du rejet | textarea | 10–300 car. (minimum aligné sur F-018/docs/13 ≥ 10) | vide | « Expliquez le motif (10 caractères minimum). » |
 
 - **Actions**:
 
@@ -1267,7 +1301,7 @@ Live updates: WebSocket channel per merchant+mode; fallback 15 s polling on D-11
 | Champ (FR) | Type | Validation | Défaut | Message d'erreur (FR) |
 |---|---|---|---|---|
 | Nom du plan | text | 2–60 car. | vide/actuel | « Donnez un nom au plan. » |
-| Montant | number FCFA | entier 100 – 10 000 000; verrouillé si abonnés actifs | vide | « Montant entre 100 FCFA et 10 000 000 FCFA. » |
+| Montant | number FCFA | entier 100 – 5 000 000 (aligné C-02 docs/14); verrouillé si abonnés actifs | vide | « Montant entre 100 FCFA et 5 000 000 FCFA. » |
 | Intervalle | select: Semaine / Mois / Année | requis | Mois | — |
 
 - **Actions**:
@@ -1300,30 +1334,32 @@ Live updates: WebSocket channel per merchant+mode; fallback 15 s polling on D-11
 
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
-| Mettre en pause / Reprendre | `clock` (primary) | Owner, Admin, Finance | `POST /subscriptions/{id}/pause` ou `/resume` |
+| Mettre en pause / Reprendre | `circle-pause` / `circle-play` (primary) | Owner, Admin, Finance | `POST /subscriptions/{id}/pause` ou `/resume` |
 | Annuler | — | idem | ferme |
 
 - **Confirm rules**: restate client + effet. · **States**: loading.
 
 ### DM-16 — Approvisionner / Top-up modal
 - **Type/anchor**: modal · **Opened from**: D-19, D-23, D-29.
-- **Contents**: instructions pas-à-pas: « 1. Composez #150# (MTN) ou #144# (Orange). 2. Envoyez le montant au {numéro Ijim Pay}. 3. Indiquez la référence **{code}** en motif. » Le code de référence est généré par `POST /topups` et affiché en monospace copiable.
+- **Contents**: deux voies (F-019). **Voie 1 — Dépôt mobile money** : instructions pas-à-pas par canal **servies par la config opérateur** (source unique côté ops — jamais codées en dur, mêmes cartes USSD que docs/09/docs/14; codes vérifiés avec les telcos, famille MTN `*126#` — ex. « Composez *126# → Transfert → {numéro Ijim Pay} → montant → référence {code} », renvoyées par `POST /topups` avec le code de référence, affiché en monospace copiable). **Voie 2 — Transfert interne** : virer du solde disponible vers le portefeuille de paiement, instantané (`POST /balance_transfers` — **API additions**, F-019 alt path).
 - **Inputs**:
 
 | Champ (FR) | Type | Validation | Défaut | Message d'erreur (FR) |
 |---|---|---|---|---|
-| Montant prévu | number FCFA | entier ≥ 1 000 | vide | « Minimum 1 000 FCFA. » |
-| Canal d'envoi | radio MTN / Orange | requis | MTN | — |
+| Source | radio: Dépôt mobile money / Transfert depuis le solde disponible | requis | Dépôt mobile money | — |
+| Montant prévu | number FCFA | entier ≥ 1 000; en transfert interne: ≤ solde disponible | vide | « Minimum 1 000 FCFA. » · transfert interne au-dessus du solde : « Le montant dépasse votre solde disponible ({solde} FCFA). » |
+| Canal d'envoi (dépôt uniquement) | radio MTN / Orange | requis | MTN | — |
 
 - **Actions**:
 
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
-| Générer la référence | `plus-circle` (primary) | Owner, Admin, Finance | `POST /topups` → affiche instructions + code |
+| Générer la référence (dépôt) | `plus-circle` (primary) | Owner, Admin, Finance | `POST /topups` → affiche instructions (config opérateur) + code |
+| Transférer maintenant (transfert interne) | `wallet` (primary, non focus par défaut) | Owner, Admin, Finance | confirmation restatée « Transférer {montant} FCFA du solde disponible vers le portefeuille de paiement ? » → `POST /balance_transfers` (**API additions**) — instantané, success moment + soldes D-29 mis à jour |
 | Copier la référence | `copy` | idem | presse-papiers |
 | Fermer | `x` | idem | ferme (le top-up reste attendu, ligne fantôme sur D-29) |
 
-- **Confirm rules**: aucune (l'argent bouge hors plateforme). · **States**: attente de réception — le modal peut rester ouvert et bascule en success moment à l'auto-match (push temps réel). · **Events**: `balance.topup.received` webhook + push + e-mail + cloche.
+- **Confirm rules**: dépôt — aucune (l'argent bouge hors plateforme); transfert interne — money-moving: confirmation restatant le montant (docs/07 §5). · **States**: attente de réception (dépôt) — le modal peut rester ouvert et bascule en success moment à l'auto-match (push temps réel); échec du transfert interne (`insufficient_balance`) — bloc danger « Solde disponible insuffisant — le transfert n'a pas été effectué. » + montant maximal proposé. · **Events**: `balance.topup.received` webhook + push + e-mail + cloche (dépôt); écriture ledger `balance_transfer` visible sur D-29 (transfert interne).
 
 ### DM-17 — Paramètres de règlement / Settlement settings modal
 - **Type/anchor**: modal + 2FA · **Opened from**: D-30.
@@ -1353,6 +1389,7 @@ Live updates: WebSocket channel per merchant+mode; fallback 15 s polling on D-11
 | Champ (FR) | Type | Validation | Défaut | Message d'erreur (FR) |
 |---|---|---|---|---|
 | Nom de la clé | text | 2–40 car. (ex. « Serveur boutique ») | vide | « Nommez cette clé pour la retrouver. » |
+| Fenêtre de grâce (variante rotation uniquement, F-024) | radio: 0 (immédiat) / 24 h / 72 h | requis en rotation | 24 h | — |
 
 - **Actions**:
 
@@ -1554,12 +1591,15 @@ Live updates: WebSocket channel per merchant+mode; fallback 15 s polling on D-11
 | Nom de la liste | text | 2–60 car. | vide/actuel | « Nommez la liste (ex. Salaires boutique). » |
 | Membre (ajout) | combobox bénéficiaires | bénéficiaire existant, pas de doublon | — | « Déjà dans la liste. » |
 | Montant par membre | number FCFA | entier ≥ 100 | vide | « Minimum 100 FCFA. » |
+| Programmation active (section « Paie programmée », F-016) | switch | — | désactivé | — |
+| Jour du mois (si programmée) | select 1–28 (28 max pour exister chaque mois) | requis si active | 28 | « Choisissez un jour entre 1 et 28. » |
+| Heure (si programmée) | time picker | requis si active | 08:00 | « Choisissez une heure. » |
 
 - **Actions**:
 
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
-| Enregistrer la liste | — (primary) | Owner, Admin, Finance | `POST /payroll_lists` ou `PATCH /payroll_lists/{id}` (**API additions**) |
+| Enregistrer la liste | — (primary) | Owner, Admin, Finance | `POST /payroll_lists` ou `PATCH /payroll_lists/{id}` (**API additions**); si la programmation a changé: `POST /payroll_lists/{id}/schedule` (**API additions**, API-ADD-5 docs/16). À la date programmée, le système crée un lot `draft` depuis la liste, vérifie le financement puis le passe en `pending_approval` (N-12 aux approbateurs, F-016); solde insuffisant au jour J → lot reste `draft` + N-14 « Paie non lancée — solde insuffisant » |
 | Retirer un membre | `trash-2` (par ligne) | idem | retire localement (persisté au save) |
 | Payer cette liste | `send` | idem | → D-23 pré-chargé |
 | Supprimer la liste | `trash-2` (footer) | Owner, Admin | confirm « Supprimer la liste “{nom}” ? Les bénéficiaires sont conservés. » → `DELETE /payroll_lists/{id}` (**API additions**) |
@@ -1632,35 +1672,36 @@ Live updates: WebSocket channel per merchant+mode; fallback 15 s polling on D-11
 |---|---|---|---|---|
 | Période | date-range | ≤ 366 jours | filtres courants | « Période invalide. » |
 | Format | radio CSV / PDF (PDF pour relevés uniquement) | requis | CSV | — |
+| Canal | radio: Tous / MTN / Orange (relevé par rail, PRD docs/01 §6 · F-013) | requis | Tous | — |
 | Colonnes | multi-select (toutes cochées) | ≥ 1 | toutes | « Choisissez au moins une colonne. » |
 
 - **Actions**:
 
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
-| Exporter | `download` (primary) | Owner, Admin, Finance | ≤ 10 000 lignes: téléchargement direct (`POST /exports` — **API additions**); au-delà: job asynchrone → « Vous recevrez le fichier par e-mail d'ici quelques minutes. » |
+| Exporter | `download` (primary) | Owner, Admin, Finance, Viewer (lecture — F-013) | ≤ 10 000 lignes: téléchargement direct (`POST /exports` — **API additions**); au-delà: job asynchrone → « Vous recevrez le fichier par e-mail d'ici quelques minutes. » |
 | Annuler | — | idem | ferme |
 
-- **Confirm rules**: aucune. · **States**: génération en cours (barre); échec « Export impossible. Réessayez. ». · **Events**: export async prêt → e-mail (lien 48 h) + cloche.
+- **Confirm rules**: aucune. · **States**: génération en cours (barre); échec « Export impossible. Réessayez. ». · **Events**: export async prêt → e-mail (lien signé 72 h, N-09) + cloche.
 
 ---
 
 ## 3. API additions needed (referenced above; absent from docs/02)
 
-Auth & user: `POST /auth/login` · `POST /auth/login/totp` · `POST /auth/signup/otp` · `POST /auth/signup` · `POST /auth/otp` · `POST /auth/otp/verify` · `POST /auth/password/forgot` · `POST /auth/password/reset` · `POST /auth/step_up` · `GET /me` · `PATCH /me` · `POST /me/password` · `POST /me/totp` · `POST /me/totp/verify` · `DELETE /me/totp` · `GET /me/sessions` · `DELETE /me/sessions/{id}` · `GET /me/devices` · `DELETE /me/devices/{id}` · `GET /me/notifications` · `POST /me/notifications/mark_all_read` · `GET /me/notification_preferences` · `PATCH /me/notification_preferences` · `DELETE /me/memberships/{id}`.
+Auth & user: `POST /auth/login` · `POST /auth/login/totp` · `POST /auth/signup/otp` · `POST /auth/signup` · `POST /auth/otp` · `POST /auth/otp/verify` · `POST /auth/password/forgot` · `POST /auth/password/reset` · `POST /auth/recovery` (récupération de compte D-49, API-ADD-13 docs/16) · `POST /auth/step_up` · `GET /me` · `PATCH /me` · `POST /me/password` · `POST /me/totp` · `POST /me/totp/verify` · `DELETE /me/totp` · `GET /me/sessions` · `DELETE /me/sessions/{id}` · `GET /me/devices` · `DELETE /me/devices/{id}` · `GET /me/notifications` · `POST /me/notifications/mark_all_read` · `GET /me/notification_preferences` · `PATCH /me/notification_preferences` · `DELETE /me/memberships/{id}`.
 
 Merchant & team: `GET /merchant` · `PATCH /merchant` · `PATCH /merchant/settlement_account` · `GET /merchant/kyb_documents` · `POST /merchant/kyb_documents` · `POST /merchant/kyb/request_tier` · `GET /members` · `PATCH /members/{id}` · `DELETE /members/{id}` · `GET /invites` · `POST /invites` · `POST /invites/{id}/resend` · `DELETE /invites/{id}` · `GET /invites/{token}` · `POST /invites/{token}/accept` · `POST /invites/{token}/decline`.
 
-Money & objects: `GET /payout_batches` (liste) · `POST /payout_batches/validate` · `POST /payout_batches/{id}/reject` · `GET /payout_batches/{id}/report` · `POST /payouts/{id}/retry` · `GET/POST/PATCH/DELETE /beneficiaries` (+`/{id}`) · `GET/POST/PATCH/DELETE /payroll_lists` (+`/{id}`) · `GET /plans` · `PATCH /plans/{id}` · `POST /plans/{id}/archive` · `POST /invoices/{id}/send_link` · `POST /invoices/send_links` · `PATCH /payment_links/{id}` · `GET /charges?payment_link=` (filtre) · `GET /subscriptions?customer=` (filtre) · `POST /charges/{id}/receipt/send` · `GET /customers/{id}` · `PATCH /customers/{id}` · `POST /customers/{id}/notes` · `GET /settlements/{id}/statement.pdf` · `GET /settlements/{id}/statement.csv` · champ portefeuille de paiement dans `GET /balance` · barème de frais `GET /fees` · stats accueil `GET /stats/volume` · vues de lien `GET /payment_links/{id}/stats`.
+Money & objects: `GET /payout_batches` (liste) · `POST /payout_batches/validate` · `POST /payout_batches/{id}/reject` · `GET /payout_batches/{id}/report` · `POST /payouts/{id}/retry` · `GET/POST/PATCH/DELETE /beneficiaries` (+`/{id}`) · `GET/POST/PATCH/DELETE /payroll_lists` (+`/{id}`) · `POST /payroll_lists/{id}/schedule` (paie programmée, API-ADD-5 docs/16) · `POST /balance_transfers` (transfert interne disponible → portefeuille, API-ADD-7 docs/16) · `GET /plans` · `PATCH /plans/{id}` · `POST /plans/{id}/archive` · `POST /invoices/{id}/send_link` · `POST /invoices/send_links` · `PATCH /payment_links/{id}` · `GET /charges?payment_link=` (filtre) · `GET /subscriptions?customer=` (filtre) · `POST /charges/{id}/receipt/send` · `GET /customers/{id}` · `PATCH /customers/{id}` · `POST /customers/{id}/notes` · `GET /settlements/{id}/statement.pdf` · `GET /settlements/{id}/statement.csv` · champ portefeuille de paiement dans `GET /balance` · barème de frais `GET /fees` · stats accueil `GET /stats/volume` · vues de lien `GET /payment_links/{id}/stats`.
 
-Developer & platform: `GET/POST/DELETE /api_keys` (+`/{id}`) · `PATCH /webhook_endpoints/{id}` · `POST /webhook_endpoints/{id}/roll_secret` · `GET /webhook_endpoints/{id}/deliveries` · `POST /webhook_deliveries/{id}/redeliver` · `GET /api_logs` · `GET /api_logs/{id}` · `POST /test_events` · `POST /exports` · `GET /search`.
+Developer & platform: `GET/POST/DELETE /api_keys` (+`/{id}`) · `POST /api_keys/{id}/rotate` (rotation avec fenêtre de grâce, F-024) · `PATCH /webhook_endpoints/{id}` · `POST /webhook_endpoints/{id}/enable` (réactivation après auto-désactivation, API-ADD-10 docs/16) · `POST /webhook_endpoints/{id}/roll_secret` · `GET /webhook_endpoints/{id}/deliveries` · `POST /webhook_deliveries/{id}/redeliver` · `GET /api_logs` · `GET /api_logs/{id}` · `POST /test_events` · `POST /exports` · `GET /search`.
 
 ## 4. Icon additions needed (absent from docs/07 §4 map)
 
-`rotate-cw` (réessayer/relivrer — déjà utilisé dans docs/08, à officialiser) · `eye` / `eye-off` (afficher le mot de passe) · `upload` (téléverser) · `camera` (capture document mobile) · `file-up` (import CSV) · `table` (correspondance de colonnes) · `list-checks` (rapport de validation) · `calendar` (sélecteur de période) · `user-round-plus` (inviter) · `smartphone` (appareil mobile — déjà utilisé dans docs/08) · `plus-circle` est déjà au map (top-up) · `x` (fermer modal/drawer) · `wrench` (maintenance) · `log-in` (se reconnecter) · `wifi-off` (hors ligne — alternative à `cloud-off` si distinction nécessaire; sinon réutiliser `cloud-off`).
+`rotate-cw` (réessayer/relivrer — déjà utilisé dans docs/08, à officialiser) · `eye` / `eye-off` (afficher le mot de passe) · `upload` (téléverser) · `camera` (capture document mobile) · `file-up` (import CSV) · `table` (correspondance de colonnes) · `list-checks` (rapport de validation) · `calendar` (sélecteur de période) · `user-round-plus` (inviter) · `smartphone` (appareil mobile — déjà utilisé dans docs/08) · `plus-circle` est déjà au map (top-up) · `x` (fermer modal/drawer) · `wrench` (maintenance) · `log-in` (se reconnecter) · `circle-pause` / `circle-play` (pause / reprise d'abonnement — D-28/DM-15; jamais `clock`, réservé au statut Pending par docs/07 §4; déjà listés dans les ajouts d'icônes de docs/16) · `wifi-off` (hors ligne — alternative à `cloud-off` si distinction nécessaire; sinon réutiliser `cloud-off`).
 
 ---
 
 ```
-INVENTORY: pages=48 tabs=7 modals=35 forms=43 tables=32 actions=220
+INVENTORY: pages=49 tabs=7 modals=35 forms=44 tables=32 actions=227
 ```

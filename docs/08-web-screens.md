@@ -1,5 +1,7 @@
 # IjimPay — Web Dashboard & Ops Console: Every Page, Every Action
 
+> **Superseded for detail**: sections A/B are now fully expanded in [docs/12](12-dashboard-pages-spec.md) (dashboard) and [docs/13](13-ops-console-spec.md) (ops console). This doc remains the overview + notifications matrix (§C).
+
 Complements `07-brand-design-system.md` (tokens, icons, components). Route map, layout, actions, states for each page. Icons are Lucide names.
 
 ---

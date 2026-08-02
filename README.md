@@ -20,6 +20,13 @@ API-first payment aggregator for Cameroon — accept MTN Mobile Money and Orange
 | [docs/08-web-screens.md](docs/08-web-screens.md) | Dashboard + ops console: every page, action, state; notifications/email matrix |
 | [docs/09-checkout-screens.md](docs/09-checkout-screens.md) | Hosted checkout & payment link pages: every screen, state, edge case |
 | [docs/10-mobile-screens.md](docs/10-mobile-screens.md) | Mobile app: full screen inventory, flows, offline/error behaviors |
+| [docs/11-platform-inventory.md](docs/11-platform-inventory.md) | **Master inventory & index**: exact counts, full sitemap, traceability |
+| [docs/12-dashboard-pages-spec.md](docs/12-dashboard-pages-spec.md) | Dashboard: 49 pages, 35 modals — every field, action, state |
+| [docs/13-ops-console-spec.md](docs/13-ops-console-spec.md) | Ops console: 24 pages, 14 modals — dual-control, recon, risk |
+| [docs/14-checkout-pages-spec.md](docs/14-checkout-pages-spec.md) | Checkout: 22 screens with final FR/EN copy for every state |
+| [docs/15-mobile-app-screens-spec.md](docs/15-mobile-app-screens-spec.md) | Mobile app: 50 screens, 19 sheets — gestures, offline, push routing |
+| [docs/16-flows-catalog.md](docs/16-flows-catalog.md) | 74 end-to-end flows + complete message catalog (35 notifications) |
+| [docs/review/](docs/review/) | Adversarial completeness reviews (gap reports) |
 
 ## Stack (decided)
 

@@ -1,9 +1,9 @@
 # Ijim Pay — Catalogue exhaustif des parcours / End-to-End Flow Catalog
 
 Status: Draft v1 · Complements docs 01–03 (contract), 07 (design system), 08–10 (screens).
-Conventions: amounts `12 500 FCFA` · FR-first copy · routes per docs/08 (dashboard `app.ijimpay.com`), docs/09 (checkout `pay.ijimpay.com`), docs/10 (app screen slugs), ops per docs/08 §B (`ops.ijimpay.com`). API paths per docs/02; anything missing is in **API additions needed** at the end (never invented inline — flows reference `[API-ADD-n]`). StatusBadge statuses are only the 8 canonical ones (`succeeded, pending, failed, expired, refunded, processing, pending_approval, draft`). `pending_approval` renders warning-600 **outlined** (collision rule 07 §2.2 — never accent-500). Notifications reference Appendix A (`N-xx`); events reference docs/02 §2.7 types. Ledger entries per docs/03 §3 chart of accounts.
+Conventions: amounts `12 500 FCFA` · FR-first copy · routes per docs/08 (dashboard `app.ijimpay.com`), docs/09 (checkout `pay.ijimpay.com`), docs/10 (app screen slugs), ops per docs/08 §B (`ops.ijimpay.com`). API paths per docs/02; anything missing is in **API additions needed** at the end (never invented inline — flows reference `[API-ADD-n]`). StatusBadge statuses are the 7 canonical transaction statuses (`succeeded, pending, failed, expired, refunded, processing, pending_approval`); `draft` is **not** a StatusBadge — it renders as a neutral ink-500 outline pill (payout batches only), exactly as docs/12 §0 and docs/13 §0 state. `pending_approval` renders warning-600 **outlined** (collision rule 07 §2.2 — never accent-500). Notifications reference Appendix A (`N-xx`); events reference docs/02 §2.7 types. Ledger entries per docs/03 §3 chart of accounts.
 
-Actor groups: **Merchant** F-001–F-034 · **Payer** F-035–F-044 · **Ops** F-045–F-054 · **System** F-055–F-065 · **Developer** F-066–F-069.
+Actor groups: **Merchant** F-001–F-034 + F-070 (TOTP), F-071 (bell notifications) · **Payer** F-035–F-044 · **Ops** F-045–F-054 · **System** F-055–F-065 · **Developer** F-066–F-069 + F-072 (checkout integration), F-073 (SDKs), F-074 (docs site). New flows are appended at the end of the ID sequence (section F), never renumbered.
 
 ---
 
@@ -40,9 +40,9 @@ Actor groups: **Merchant** F-001–F-034 · **Payer** F-035–F-044 · **Ops** F
 
 ### F-003 — Mot de passe oublié / Forgot password
 - **Actor(s)**: merchant user · **Trigger**: "Mot de passe oublié ?" on `/forgot-password` · **Preconditions**: account exists · **Frequency**: dozens/day.
-- **Steps**: 1) enters phone/email → OTP sent `[API-ADD-1]` (N-02) → 2) enters OTP → 3) sets new password (min 8 chars, 1 digit; live strength meter) → 4) all other sessions revoked, redirected to `/login` with toast "Mot de passe modifié — reconnectez-vous". Screens: `/forgot-password`.
-- **Failure branches**: unknown account → same neutral success copy "Si un compte existe, un code a été envoyé" (no enumeration); OTP failures as F-001; TOTP-enrolled users must ALSO pass TOTP before reset (account-takeover defense).
-- **Postconditions**: new `password_hash`, sessions revoked, audit_log entry. **Notifications**: N-02, N-21 (password changed alert push+email+SMS).
+- **Steps** (token-link mechanism, aligned with docs/12 D-04/D-05): 1) enters phone/email → reset link sent `[API-ADD-1]` (`POST /auth/password/forgot`; email link, or SMS code + short link; token expires 30 min) → 2) opens `/reset-password?token=…` → 3) sets new password (min 8 chars, 1 digit; live strength meter) → `POST /auth/password/reset` → 4) all sessions revoked, redirected to `/login` with banner "Mot de passe modifié. Connectez-vous.". Screens: `/forgot-password` (D-04), `/reset-password` (D-05).
+- **Failure branches**: unknown account → same neutral success copy "Si un compte existe, un lien a été envoyé" (no enumeration); expired/invalid token → dedicated page "Ce lien a expiré." + [Demander un nouveau lien] → D-04; TOTP-enrolled users must ALSO pass TOTP before the new password is accepted (account-takeover defense — D-05 surfaces this step).
+- **Postconditions**: new `password_hash`, sessions revoked, audit_log entry. **Notifications**: N-02 variant (reset link/code), N-21 (password changed alert push+email+SMS).
 
 ### F-004 — Réinitialisation du PIN (app) / PIN reset
 - **Actor(s)**: app user · **Trigger**: "PIN oublié" on `login-pin`, or 5 wrong PINs · **Preconditions**: enrolled device · **Frequency**: dozens/week.
@@ -72,7 +72,7 @@ Actor groups: **Merchant** F-001–F-034 · **Payer** F-035–F-044 · **Ops** F
 
 ### F-007 — Passage en mode réel / Go-live tier upgrade
 - **Actor(s)**: Owner/Admin · **Trigger**: Tier 1 approved (N-04) → CTA "Passer en mode réel" on test banner / checklist · **Preconditions**: `kyb_status=approved`, tier ≥ 1 · **Frequency**: once per merchant (+ Tier 2 requests).
-- **Steps**: 1) go-live checklist modal (see F-068 content: live keys created, webhook live endpoint set, settlement account confirmed) → 2) merchant flips Test/Live toggle → live `sk_live_`/`pk_live_` revealed once (`/developers/keys`) → 3) amber banner disappears in live mode; Tier 1 volume limits shown on `/settings/verification` → 4) later: "Demander le niveau 2" button → uploads any additional docs → ops F-047.
+- **Steps**: 1) merchant reviews the go-live checklist on the docs site (F-068 — live keys created, webhook live endpoint set, settlement account confirmed; state stored `[API-ADD-16]`; advisory, not blocking — no dashboard modal, per docs/12 §0.2 the toggle itself carries only the tier-0 disabled tooltip) → 2) merchant flips Test/Live toggle → live `sk_live_`/`pk_live_` revealed once (`/developers/keys`) → 3) amber banner disappears in live mode; Tier 1 volume limits shown on `/settings/verification` → 4) later: "Demander le niveau 2" button → uploads any additional docs → ops F-047.
 - **Failure branches**: toggle attempted at tier 0 → blocking modal "Vérifiez votre entreprise pour encaisser en réel" with CTA to F-005; live charge attempted with test key → API 403 `authentication_failed`.
 - **Postconditions**: live keys active; merchant status `active`. **Notifications**: N-04 already sent; N-06 on Tier 2 approval.
 
@@ -145,9 +145,9 @@ Actor groups: **Merchant** F-001–F-034 · **Payer** F-035–F-044 · **Ops** F
 |---|---|---|---|---|
 | 1 | Finance | Télécharge le modèle CSV ; téléverse son fichier | Parses UTF-8/;-or-,; ≤ 1 000 lignes v1 | `/payouts/new` (mass) |
 | 2 | Finance | Mappe les colonnes (téléphone, nom, montant, canal?, référence?) | Auto-suggest by header names | column mapper |
-| 3 | — | Rapport de validation | Per-row checks: phone E.164/prefix, amount ≥ 100 entier, duplicate refs, unknown channel; errors listed per row ("Ligne 12 : numéro invalide") | validation report |
+| 3 | — | Rapport de validation | Server-side per-row checks via `POST /payout_batches/validate` `[API-ADD-19]`: phone E.164/prefix, amount ≥ 100 entier, duplicate refs, unknown channel; errors listed per row ("Ligne 12 : numéro invalide") | validation report |
 | 4 | Finance | Corrige (re-upload) ou "Exclure les lignes en erreur" | Only valid rows carried forward | idem |
-| 5 | Finance | Écran de revue : total, frais, table par item, funding check "Solde : 1 200 000 FCFA — suffisant ✅ / insuffisant ❌" | `POST /payout_batches` → batch `draft` then `pending_approval` | review |
+| 5 | Finance | Écran de revue : total, frais (barème par canal via `GET /fees` `[API-ADD-19]`), table par item, funding check "Solde : 1 200 000 FCFA — suffisant ✅ / insuffisant ❌" | `POST /payout_batches` → batch `draft` then `pending_approval` | review |
 | 6 | Admin | Approuve (F-017) | batch `processing` → items dispatched → `completed`/`partially_failed` | `/payouts/batches/:id` |
 
 - **Failure branches**: >1 000 rows → "Fichier trop grand — 1 000 lignes maximum, divisez le fichier"; all rows invalid → cannot proceed; insufficient funding at review → submit disabled + top-up CTA; per-item failures during processing → item `failed` with failure_code, retry per item; partial → banner "47/50 réussis — 3 échecs à revoir" + report download.
@@ -265,7 +265,7 @@ Actor groups: **Merchant** F-001–F-034 · **Payer** F-035–F-044 · **Ops** F
 |---|---|---|---|---|
 | 1 | Payeur | Voit logo/nom marchand, titre, **montant héros** (fixe) ou saisit le montant (libre) | funnel event `link_viewed` / `amount_entered` | `/l/{slug}` |
 | 2 | Payeur | "Payer 15 000 FCFA" → saisit son numéro; ChannelChip auto-détecté ("Numéro MTN détecté"), [Changer] pour surcharger | `phone_submitted` | Phone & channel |
-| 3 | Payeur | "Confirmer le paiement" | `POST /charges` (publishable-key context) → `pending`; `charge_created` | → `/pay/{charge_id}` |
+| 3 | Payeur | "Confirmer le paiement" | `POST /v1/public/charges` `[API-ADD-17]` (server-brokered, publishable-key/session scoped — the payer surface never calls docs/02 `POST /charges` directly, per docs/14) → `pending`; `charge_created` | → `/pay/{charge_id}` |
 | 4 | Payeur | Valide sur son téléphone : MTN "Validez la notification, ou composez **\*126\*1#** puis confirmez avec votre code MoMo." / Orange "Composez **\*150\*4\*4#** pour approuver…" | 3 s polling/SSE; countdown ring 5 min; progressive copy 45 s / 2 min | Waiting |
 | 5 | — | — | `succeeded` → success moment; receipt link `/r/{id}` | Success |
 
@@ -296,12 +296,12 @@ Actor groups: **Merchant** F-001–F-034 · **Payer** F-035–F-044 · **Ops** F
 - **Postconditions**: each retry = new `charges` row with its own idempotency key; failed charge remains for funnel analytics. **Events**: per charge. **Notifications**: N-07 on eventual success.
 
 ### F-040 — Renvoyer la demande / Resend request
-- **Actor(s)**: payer · **Trigger**: at 2 min on waiting screen, [Renvoyer la demande] appears (allowed once) · **Steps**: click → system cancels the pending charge and creates a fresh one (new USSD push), same `/pay/{charge_id}`-style page for the new charge; button then disabled "Demande renvoyée".
+- **Actor(s)**: payer · **Trigger**: at 2 min on waiting screen, [Renvoyer la demande] appears (allowed once) · **Steps**: click → `POST /v1/public/charges/{id}/resend` `[API-ADD-17]` cancels the pending charge and creates a fresh one (new USSD push), same `/pay/{charge_id}`-style page for the new charge; button then disabled "Demande renvoyée". Merchant-app equivalent (docs/15 M-27): `POST /charges/{id}/cancel` `[API-ADD-18]` + new `POST /charges`.
 - **Failure branches**: original succeeds in the race window → server rejects resend, page flips to Success; resend also times out → normal expiry (F-056) then F-039.
 - **Postconditions**: old charge `expired` (superseded note in metadata), new charge `pending`. **Events**: `charge.expired` (old) then terminal event (new).
 
 ### F-041 — Changer de numéro / canal en cours / Change number or channel mid-flow
-- **Actor(s)**: payer · **Trigger**: [Changer de numéro] on waiting (from 2 min) or failure screen · **Steps**: returns to Phone & channel with amount preserved → new number → auto-detect chip, override chips MTN/Orange (radio) → confirm → new charge. Pending old charge is cancelled server-side.
+- **Actor(s)**: payer · **Trigger**: [Changer de numéro] on waiting (from 2 min) or failure screen · **Steps**: returns to Phone & channel with amount preserved → new number → auto-detect chip, override chips MTN/Orange (radio) → confirm → new charge. Pending old charge is cancelled server-side (`POST /v1/public/charges/{id}/resend` with the new phone/channel `[API-ADD-17]`; merchant surfaces use `POST /charges/{id}/cancel` `[API-ADD-18]`).
 - **Failure branches**: unknown prefix → manual channel pick required; same F-035 create errors.
 - **Postconditions**: new charge on new phone/channel. **Events**: as usual.
 
@@ -370,7 +370,7 @@ Actor groups: **Merchant** F-001–F-034 · **Payer** F-035–F-044 · **Ops** F
 - **Postconditions**: channel status flag; audit. **Notifications**: status banners (in-product); N-28 email to affected merchants on prolonged (> 2 h) outage.
 
 ### F-052 — Alerte risque → dossier → résolution / Risk flag → case → resolution
-- **Actor(s)**: risk rules (system) + compliance · **Trigger**: rule fires (velocity, payer=merchant patterns, structuring, PIN-reset+payout pattern) · **Steps**: 1) flagged item appears in `/risk` review queue with rule, score, linked objects → 2) analyst opens case: notes, requests info from merchant if needed (email template), can apply holds (payouts locked) → 3) resolution: **cleared** (flag dismissed, holds lifted) / **restricted** (limits lowered, dual-control) / **escalated** (suspension F-048 and/or STR F-053).
+- **Actor(s)**: risk rules (system) + compliance · **Trigger**: rule fires (velocity, payer=merchant patterns, structuring, PIN-reset+payout pattern) · **Steps**: 1) flagged item appears in `/risk` review queue with rule, score, linked objects → 2) analyst opens case: notes, attaches linked transactions/evidence, requests info from merchant if needed (email template) — no direct payout-hold action exists on the case (docs/13 O-13); any payout lock goes through the restriction/suspension outcomes below → 3) resolution: **cleared** (flag dismissed) / **restricted** (limits lowered, dual-control) / **escalated** (suspension F-048 and/or STR F-053).
 - **Failure branches**: merchant unresponsive 7 days → auto-escalate; false-positive-heavy rule → threshold edit in rules list (audited).
 - **Postconditions**: case record with outcome; audit. **Notifications**: N-29 (merchant info request) when applicable.
 
@@ -471,7 +471,7 @@ Actor groups: **Merchant** F-001–F-034 · **Payer** F-035–F-044 · **Ops** F
 - **Postconditions**: test objects only.
 
 ### F-068 — Liste de contrôle avant mise en production / Go-live checklist
-- **Actor(s)**: developer + Owner · **Trigger**: F-007 go-live modal and docs page · **Steps** (each checkable, stored per merchant `[API-ADD-16]`): 1) all four magic-number outcomes handled in code · 2) webhook signature verification implemented (F-069) and ping green on the **live** endpoint · 3) idempotency keys on every POST money call · 4) terminal-state handling relies on webhooks/polling, never on redirect alone (session flows verify signature params server-side) · 5) live keys stored in secret manager, never client-side (`pk_` only in browser) · 6) settlement account confirmed · 7) rate-limit/429 handling with `Retry-After`. Completing unlocks a "Prêt pour le réel ✓" badge on the checklist (advisory, not blocking).
+- **Actor(s)**: developer + Owner · **Trigger**: docs-site go-live page (docs.ijimpay.com, F-074 — linked from the test-mode banner and F-007; no dashboard modal) · **Steps** (each checkable, stored per merchant `[API-ADD-16]`): 1) all four magic-number outcomes handled in code · 2) webhook signature verification implemented (F-069) and ping green on the **live** endpoint · 3) idempotency keys on every POST money call · 4) terminal-state handling relies on webhooks/polling, never on redirect alone (session flows verify signature params server-side) · 5) live keys stored in secret manager, never client-side (`pk_` only in browser) · 6) settlement account confirmed · 7) rate-limit/429 handling with `Retry-After`. Completing unlocks a "Prêt pour le réel ✓" badge on the checklist (advisory, not blocking).
 - **Failure branches**: live endpoint ping failing → item stays red with delivery log link.
 - **Postconditions**: checklist state saved. **Notifications**: none.
 
@@ -479,6 +479,49 @@ Actor groups: **Merchant** F-001–F-034 · **Payer** F-035–F-044 · **Ops** F
 - **Actor(s)**: developer's server · **Trigger**: every received webhook · **Steps** (contract per docs/02 §2.7): 1) read `X-Ijimpay-Signature: t=...,v1=...` → 2) compute `hex(hmac_sha256(secret, t + "." + raw_body))` on the **raw** body → 3) constant-time compare with `v1` → 4) reject if |now − t| > 5 min (replay) → 5) respond 2xx fast (< 5 s), process async; dedupe on event `id` (at-least-once delivery).
 - **Failure branches**: body re-serialized before HMAC → mismatch (docs warn: raw bytes); multiple `v1` values during secret rotation → accept any match; non-2xx/slow → retry ladder F-058 (duplicates expected → dedupe).
 - **Postconditions**: merchant system state driven only from verified events.
+
+---
+
+## F. Appended flows (v1 addenda — IDs continue the global sequence, never renumbered)
+
+### F-070 — Activer la 2FA (TOTP) / TOTP enrollment
+- **Actor(s)**: any merchant user (mandatory for Owner/Admin of a Tier ≥ 1 merchant; required before any approval — F-017, docs/12 DM-08/D-41) · **Trigger**: `/settings/security` (D-41) [Activer la 2FA] → modal DM-26; or blocking prompt when an approval requires TOTP and none is enrolled · **Preconditions**: active session · **Frequency**: once per user.
+- **Steps**: 1) modal step 1: QR TOTP + manual secret (`POST /me/totp` `[API-ADD-21]`) scanned into any authenticator app → 2) step 2: enters the 6-digit app code → `POST /me/totp/verify` (window ±1 step) → 3) step 3: 10 backup codes displayed — download (`download`, fichier texte) or copy is **mandatory** before the modal can close → 4) 2FA active: approvals unlocked (F-017), subsequent logins get the TOTP step (F-002), step-up prompts (F-020 settlement change, key reveals) now available.
+- **Failure branches**: wrong code or device clock skew → inline "Code incorrect — vérifiez l'heure de votre téléphone" (retry; code rotates every 30 s); modal abandoned before verify → nothing enrolled, secret discarded; lost authenticator later → backup code accepted at login (each single-use), banner suggests re-enrollment; backup codes exhausted + no authenticator → account recovery (F-033); disable attempt (`DELETE /me/totp`, re-prompt DM-28) by Owner/Admin of a Tier ≥ 1 merchant → blocked "La 2FA est obligatoire pour votre rôle."
+- **Postconditions**: `totp_secret` stored, backup codes hashed; audit_log `user.totp_enrolled`. **Events**: none. **Notifications**: N-21 variant email + SMS "2FA activée".
+
+### F-071 — Notifications in-app (cloche) / In-dashboard bell notifications (generate → tray → deep-link)
+- **Actor(s)**: System (generation) + any merchant user (consumption, web dashboard) · **Trigger**: any event whose docs/08 §C matrix row includes the bell channel (payment received, batch to approve, batch finished, settlement paid, top-up received, webhook failing, team/security changes…) · **Frequency**: continuous.
+- **Steps**: 1) event fires → a notification row is created per eligible user (role-scoped, filtered by the user's D-40 preferences) `[API-ADD-20]` → 2) `bell` unread badge in the topbar (danger-600 dot, max "9+") updates in real time; new entries slide in at the top of the open tray → 3) user opens the tray D-43 (`GET /me/notifications`): icon per type, titre FR, extrait, horodatage relatif → 4) row click marks it read and deep-links to the linked object (DM-01 tx drawer, D-24 batch, D-31 settlement, D-34 endpoint…) → 5) [Tout marquer comme lu] → `POST /me/notifications/mark_all_read`. Mobile equivalent: app notification center + push routing per docs/15.
+- **Failure branches**: linked object no longer accessible (role changed/removed) → toast "Vous n'avez plus accès à cet élément", notification still marked read; empty tray → "Rien de nouveau. Les paiements reçus, approbations et alertes apparaîtront ici."
+- **Postconditions**: per-user read state; no ledger/business change (pure consumer). **Events**: none. **Notifications**: this flow *is* the bell channel of every Appendix A entry that lists `bell`.
+
+### F-072 — Intégration checkout e-commerce / Merchant integrates redirect checkout (create session → redirect → webhook → fulfil)
+- **Actor(s)**: developer at an e-commerce merchant (persona docs/00) · **Trigger**: docs-site recipe "Boutique en ligne" (F-074) or WooCommerce plugin (docs/02 §5) · **Preconditions**: API keys (test first), webhook endpoint configured (F-026) · **Frequency**: once per shop; then every order.
+- **Steps**:
+
+| # | Acteur | Action | Comportement système | Écran |
+|---|---|---|---|---|
+| 1 | Serveur marchand | À la confirmation de commande : `POST /checkout_sessions` (docs/02 §2.2) avec montant/panier, `success_url`, `cancel_url`, `reference` | Session created; hosted URL returned | — |
+| 2 | Boutique | Redirige le client vers `/c/{session_id}` | Landing with order summary (docs/14 C-03) | `/c/{session_id}` |
+| 3 | Client | Paie (F-037 → F-035 steps 2–5) | Charge terminal state | Waiting → Success |
+| 4 | Navigateur | Retour `success_url` avec `charge_id` + paramètres signés | Merchant server verifies the signature params **server-side**; shows "confirmation en cours" only — never fulfils on redirect alone (F-068 item 4) | boutique |
+| 5 | Serveur marchand | Reçoit `charge.succeeded` (signature vérifiée F-069) | Marks the order paid → fulfils | — |
+
+- **Failure branches**: signature params invalid/missing on return → treat as unpaid, rely on webhook; webhook delayed → order stays "en attente de confirmation", fallback poll `GET /charges/{id}`; duplicate webhook delivery → dedupe on event `id` (F-069); payer cancels/abandons → `cancel_url`, session `abandoned` webhook (docs/09); session expired before payment → shop creates a new session on retry; charge succeeds after tab closed → webhook still fulfils, receipt reachable (F-037).
+- **Postconditions**: fulfilment driven only by verified webhook/poll; ledger as F-008; session `completed`. **Events**: charge events + session webhooks. **Notifications**: N-07 (merchant), N-30 (payer).
+
+### F-073 — Intégrer via SDK JS/TS ou PHP / Integrate via official SDK
+- **Actor(s)**: developer · **Trigger**: docs-site quickstart tabs curl / JS/TS / PHP (PRD §7 MUST: JS/TS and PHP SDKs at launch — docs/02 §5) · **Preconditions**: test keys (F-066) · **Frequency**: most integrations.
+- **Steps**: 1) install — `npm i @ijimpay/node` or `composer require ijimpay/ijimpay-php` → 2) instantiate the client with `sk_test_` from env/secret manager (never client-side; `pk_` only in browser via `@ijimpay/checkout` widget) → 3) create charges / checkout sessions / payouts through typed methods — `Idempotency-Key` generated automatically per request (overridable) → 4) verify webhooks with the SDK helper (`verifySignature(rawBody, signatureHeader, secret)`) implementing F-069 (raw body, constant-time compare, 5-min tolerance) → 5) run the magic-number matrix (F-067) through the SDK → 6) swap to `sk_live_` after the go-live checklist (F-068) — same code path.
+- **Failure branches**: framework consumes the raw body before verification → per-framework raw-body capture documented (signature fails otherwise, F-069); unsupported runtime version → documented minimums with clear install-time error; API/SDK version drift → both SDKs are generated from the same OpenAPI 3.1 spec and pinned per release (docs/02); widget blocked (CSP/in-app browser) → automatic fallback to full redirect (docs/14).
+- **Postconditions**: integration runs on supported, versioned SDKs. **Events/Notifications**: none beyond the underlying flows.
+
+### F-074 — Démarrage via le site de docs / Docs-site quickstart & persona recipes
+- **Actor(s)**: developer (consuming); platform team (publishing) · **Trigger**: opens `docs.ijimpay.com` — an **owned public surface** (FR-first, EN parity), linked from every dashboard `book-open` entry, the F-066 quickstart banner, and every API error `doc_url` (docs/02 §1) · **Preconditions**: none (public; signing in enables saved checklist state) · **Frequency**: every integration.
+- **Steps**: 1) **publishing**: the OpenAPI 3.1 spec is generated from `openapi/` and published on every API release (docs/02) — reference pages are generated from it, never hand-copied → 2) **quickstart "Encaissez en 5 minutes"**: copy `sk_test_` → first `POST /charges` with a magic number (F-067) → see it on dashboard `/transactions` (wraps F-066, target < 30 min wall-clock) → 3) **recipes per persona** (PRD §7): boutique e-commerce (F-072), encaissement au comptoir (F-008/F-009), liens de paiement (F-010), paie & paiements en masse (F-014/F-015), abonnements (F-028/F-029) — each with runnable samples in curl / JS/TS / PHP (F-073) → 4) **go-live checklist page** (F-068) — items checkable, state stored per merchant `[API-ADD-16]` when signed in → 5) **error-code reference** — each stable error code (docs/02 §1) has a landing page matching its `doc_url`.
+- **Failure branches**: docs behind the API → impossible by pipeline (spec and reference published from the same release); signed-out checklist use → local-only state with a prompt to sign in to save; broken `doc_url` → CI link-check on every release.
+- **Postconditions**: none (read-only surface; checklist state per F-068). **Events/Notifications**: none.
 
 ---
 
@@ -530,7 +573,7 @@ Every push/email/SMS/WhatsApp message in the flows above. Channels per docs/08 �
 
 | Ref | Method + path | Purpose |
 |---|---|---|
-| API-ADD-1 | `POST /auth/otp` · `POST /auth/otp/verify` · `POST /auth/login` · `POST /auth/password_reset` | Dashboard/app auth (OTP send/verify, login incl. TOTP step, password reset) |
+| API-ADD-1 | `POST /auth/otp` · `POST /auth/otp/verify` · `POST /auth/login` · `POST /auth/login/totp` · `POST /auth/password/forgot` · `POST /auth/password/reset` — app-side additions: `POST /auth/pin/set` · `POST /auth/token/refresh` · `POST /auth/logout` (docs/15) | Dashboard/app auth — **converged path set**: same names as docs/12 §3; docs/15 declares this row canonical (its M-03/M-04 use `/auth/otp`, `/auth/otp/verify`) |
 | API-ADD-2 | `PUT /merchant/profile` · `POST /merchant/kyb_documents` · `POST /merchant/kyb/submit` | Onboarding drafts, document upload, KYB submission |
 | API-ADD-3 | `PATCH /payment_links/{id}` | Edit / re-activate a link |
 | API-ADD-4 | `POST /exports` · `GET /exports/{id}` | Async statement/CSV export jobs |
@@ -538,19 +581,24 @@ Every push/email/SMS/WhatsApp message in the flows above. Channels per docs/08 �
 | API-ADD-6 | `POST /payout_batches/{id}/reject` | Checker rejection with reason |
 | API-ADD-7 | `POST /balance_transfers` | Internal transfer available → payout wallet |
 | API-ADD-8 | `POST /invites` · `POST /invites/{id}/accept` · `PATCH/DELETE /members/{user_id}` | Team invite, role change, removal |
-| API-ADD-9 | `POST /api_keys` · `POST /api_keys/{id}/revoke` | Key create/rotate/revoke (dashboard-auth) |
-| API-ADD-10 | `POST /webhook_endpoints/{id}/enable` · `PATCH /webhook_endpoints/{id}` · `POST /events/{id}/redeliver` | Re-enable, edit, manual redelivery |
-| API-ADD-11 | `POST /invoices/{id}/dunning_link` | Generate single-use dunning payment link |
-| API-ADD-12 | `GET /devices` · `POST /devices/{id}/revoke` | Enrolled device list & revocation |
+| API-ADD-9 | `POST /api_keys` · `POST /api_keys/{id}/rotate` · `DELETE /api_keys/{id}` | Key create / rotate (grace window) / revoke — converged with docs/12 D-32 |
+| API-ADD-10 | `POST /webhook_endpoints/{id}/enable` · `PATCH /webhook_endpoints/{id}` · `POST /webhook_deliveries/{id}/redeliver` | Re-enable, edit, manual redelivery — converged with docs/12 (redelivery targets the delivery, not the event) |
+| API-ADD-11 | `POST /invoices/{id}/send_link` | Generate + send single-use dunning payment link — converged with docs/12 D-28 |
+| API-ADD-12 | `GET /me/devices` · `DELETE /me/devices/{id}` (+ app-side `POST /devices/{id}/enroll`, docs/15) | Enrolled device list & revocation — converged on docs/12 §3's user-scoped paths |
 | API-ADD-13 | `POST /auth/recovery` | Account recovery with identity re-verification |
 | API-ADD-14 | `GET /me/memberships` · `POST /me/switch` | Business list & context switch |
 | API-ADD-15 | Ops (internal API): `POST /ops/kyb/{merchant_id}/approve|reject` · `PATCH /ops/merchants/{id}/tier` · `POST /ops/merchants/{id}/suspend` | KYB decisions, tier, suspension |
 | API-ADD-16 | `GET/PUT /merchant/golive_checklist` | Persisted go-live checklist state |
+| API-ADD-17 | `GET /v1/public/links/{slug}` · `GET /v1/public/checkout_sessions/{id}` · `POST /v1/public/charges` · `GET /v1/public/charges/{id}` · `POST /v1/public/charges/{id}/resend` | Payer-surface public endpoints per docs/14 §API additions — landing resolution, server-brokered charge create/poll, resend = cancel + recreate (F-035/F-036/F-040/F-041) |
+| API-ADD-18 | `POST /charges/{id}/cancel` | Merchant-side cancel of a pending charge (app resend path, docs/15 M-27; payer surface uses API-ADD-17's `/resend`) |
+| API-ADD-19 | `GET /fees` · `POST /payout_batches/validate` | Fee schedule for review screens + server-side CSV row validation (F-015; names per docs/12 §3) |
+| API-ADD-20 | `GET /me/notifications` · `POST /me/notifications/mark_all_read` | In-dashboard bell tray feed & read state (F-071, docs/12 D-43) |
+| API-ADD-21 | `POST /me/totp` · `POST /me/totp/verify` · `DELETE /me/totp` | TOTP enrollment / verify / disable (F-070, docs/12 D-41 + DM-26) |
 
 ## Icon additions needed (not in docs/07 §4 map — to be added there before use)
 
-`rotate-cw` (retry/redeliver — already used in docs/08 prose) · `scale` (reconciliation — flagged in docs/08 §B) · `smartphone` (enrolled devices — used in docs/08 A10) · `plus` (app FAB — used in docs/10) · `upload` (CSV/report import) · `flag` (risk flag/case) · `circle-pause` / `circle-play` (subscription pause/resume) · `building-2` (business switcher) · `file-text` (statements/relevés) · `phone-call` (voice OTP fallback).
+`rotate-cw` (retry/redeliver — already used in docs/08 prose) · `scale` (reconciliation — flagged in docs/08 §B) · `smartphone` (enrolled devices — used in docs/08 A10) · `plus` (app FAB — used in docs/10) · `upload` (CSV/report import) · `siren` (risk flag/case — one icon for the concept across surfaces, already used by docs/13 O-12/O-13; `flag` is not used) · `circle-pause` / `circle-play` (subscription pause/resume) · `building-2` (business switcher) · `file-text` (statements/relevés) · `phone-call` (voice OTP fallback).
 
 ```
-INVENTORY: flows_merchant=34 flows_payer=10 flows_ops=10 flows_system=11 flows_developer=4 flows_total=69 notifications=35
+INVENTORY: flows_merchant=36 flows_payer=10 flows_ops=10 flows_system=11 flows_developer=7 flows_total=74 notifications=35
 ```

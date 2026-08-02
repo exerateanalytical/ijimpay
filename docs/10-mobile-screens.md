@@ -1,5 +1,7 @@
 # IjimPay — Mobile App: Every Screen, Every Flow, Every Action
 
+> **Superseded for detail**: fully expanded in [docs/15](15-mobile-app-screens-spec.md). This doc remains the overview.
+
 Expands `04-mobile-app.md` into a full screen inventory. Icons = Lucide (24px). Bottom nav: Accueil `layout-dashboard` · Liens `link` · **Encaisser `hand-coins`** (raised center) · Activité `arrow-left-right` · Menu `settings`. All flows FR-first; strings shown are the actual v1 copy draft.
 
 ---

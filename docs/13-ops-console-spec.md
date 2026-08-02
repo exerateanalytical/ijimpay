@@ -67,7 +67,7 @@ Left sidebar 240px (collapsible): Accueil `layout-dashboard` · File KYB `badge-
 - **Events/notifications triggered**: none (read-only).
 
 ### O-03 — File KYB / KYB Queue
-- **Route**: `/queue/kyb` · **Icon**: lucide `badge-check` · **Access**: compliance, ops-admin (ops: read-only) · **Purpose**: work the queue of merchants awaiting tier verification, ordered by SLA.
+- **Route**: `/queue/kyb` · **Icon**: lucide `badge-check` · **Access**: ops, compliance, ops-admin (finance-admin: read-only) — per docs/16 F-045/F-046, ops works and decides the queue; compliance handles complex/escalated dossiers · **Purpose**: work the queue of merchants awaiting tier verification, ordered by SLA.
 - **Layout zones**: header (title + count + SLA summary "3 en dépassement") · toolbar (filters: palier demandé 1/2, statut dossier `nouveau|en revue|infos demandées`, assigné à, tri SLA/date) · content: queue table · aside: quick stats (approuvés/rejetés cette semaine, temps médian).
 - **Tabs**: none.
 - **Data displayed**: table rows from `GET /internal/v1/kyb/reviews?status=` — merchant `name`, `legal_name`, `tier` actuel → palier demandé (merchants.tier, docs/03), docs count (`kyb_documents`), soumis le, assigné à, SLA chip (règle SLA), StatusBadge dossier (`pending` = nouveau, `processing` = en revue).
@@ -76,16 +76,16 @@ Left sidebar 240px (collapsible): Accueil `layout-dashboard` · File KYB `badge-
 
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
-| Examiner | `badge-check` | compliance | Ouvre O-04 pour la ligne; `POST /internal/v1/kyb/reviews/{id}/claim` (assigne à moi si non assigné) |
-| M'assigner | `user-round` | compliance | `POST /internal/v1/kyb/reviews/{id}/claim`; badge "Assigné : {nom}" |
+| Examiner | `badge-check` | ops, compliance | Ouvre O-04 pour la ligne; `POST /internal/v1/kyb/reviews/{id}/claim` (assigne à moi si non assigné) |
+| M'assigner | `user-round` | ops, compliance | `POST /internal/v1/kyb/reviews/{id}/claim`; badge "Assigné : {nom}" |
 | Exporter la file | `download` | ops-admin | CSV `GET /internal/v1/kyb/reviews/export` (e-mail async si > 10 000 lignes) |
 
 - **Modals/drawers/sheets opened**: none (detail is a full page, O-04).
-- **States**: loading skeleton rows; empty « Aucun dossier KYB en attente. La file est à jour. »; error with retry; permission-denied (ops sees table, action buttons hidden); filtered-empty « Aucun dossier ne correspond à ces filtres. Réinitialiser ».
+- **States**: loading skeleton rows; empty « Aucun dossier KYB en attente. La file est à jour. »; error with retry; permission-denied (finance-admin sees table, action buttons hidden); filtered-empty « Aucun dossier ne correspond à ces filtres. Réinitialiser ».
 - **Events/notifications triggered**: claim → notification bell à l'ancien assigné si réassignation.
 
 ### O-04 — Revue KYB / KYB Review Detail
-- **Route**: `/queue/kyb/:reviewId` · **Icon**: lucide `badge-check` · **Access**: compliance (decide), ops-admin (decide), ops (read-only) · **Purpose**: side-by-side verification of uploaded documents against declared business data, ending in approve / reject / request-info.
+- **Route**: `/queue/kyb/:reviewId` · **Icon**: lucide `badge-check` · **Access**: ops (decide — F-045/F-046), compliance (decide — cas complexes, documents suspects, escalades), ops-admin (decide), finance-admin (read-only) · **Purpose**: side-by-side verification of uploaded documents against declared business data, ending in approve / reject / request-info.
 - **Layout zones**: header (merchant name, palier demandé, SLA chip, assigné) · **left pane: visionneuse de documents** (PDF/image viewer, zoom, rotation, page nav, doc switcher tabs RCCM / Pièce d'identité / Preuve de compte) · **right pane: données déclarées** (form data + checklist) · footer action bar (sticky) · aside historique (previous decisions, notes).
 - **Tabs**: none (doc switcher is within the viewer, not page tabs).
 - **Data displayed**: documents from `kyb_documents` (docs/03) via `GET /internal/v1/kyb/reviews/{id}` — type, fichier, uploadé le, statut par document; declared data: `merchants.legal_name`, forme juridique, secteur, adresse, owner ID name/number, compte de règlement (canal + numéro, docs/03 `default_settlement_channel`); comparison table: Champ déclaré | Valeur | Concordance (✓/✗ toggle set by reviewer); history: décisions antérieures avec motifs (`audit_logs`).
@@ -103,14 +103,14 @@ Left sidebar 240px (collapsible): Accueil `layout-dashboard` · File KYB `badge-
 
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
-| Approuver le palier | `circle-check` | compliance | Ouvre OM-02 (choix palier + limites); à la confirmation `POST /internal/v1/kyb/reviews/{id}/approve` → merchants.tier mis à jour, e-mail+push+SMS marchand « Vérification approuvée » (matrice docs/08 §C) |
-| Rejeter | `circle-x` | compliance | Ouvre OM-01 (bibliothèque de motifs FR); `POST /internal/v1/kyb/reviews/{id}/reject` |
-| Demander des informations | `message-square` | compliance | Ouvre OM-03; `POST /internal/v1/kyb/reviews/{id}/request_info` — dossier passe à « infos demandées », SLA en pause |
-| Télécharger le document | `download` | compliance, ops | `GET /internal/v1/kyb/documents/{docId}/download` (URL signée 5 min; téléchargement journalisé) |
+| Approuver le palier | `circle-check` | ops, compliance | Ouvre OM-02 (choix palier + limites); à la confirmation `POST /internal/v1/kyb/reviews/{id}/approve` — Palier 1 : merchants.tier mis à jour immédiatement, e-mail+push+SMS marchand « Vérification approuvée » (matrice docs/08 §C) ; Palier 2 : règle DC — crée une demande d'approbation ops-admin (O-17, F-047), rien n'est appliqué avant la seconde approbation |
+| Rejeter | `circle-x` | ops, compliance | Ouvre OM-01 (bibliothèque de motifs FR); `POST /internal/v1/kyb/reviews/{id}/reject` |
+| Demander des informations | `message-square` | ops, compliance | Ouvre OM-03; `POST /internal/v1/kyb/reviews/{id}/request_info` — dossier passe à « infos demandées », SLA en pause |
+| Télécharger le document | `download` | ops, compliance | `GET /internal/v1/kyb/documents/{docId}/download` (URL signée 5 min; téléchargement journalisé) |
 | Réassigner | `users-round` | ops-admin | `POST /internal/v1/kyb/reviews/{id}/assign` (picker staff) |
 
 - **Modals/drawers/sheets opened**: OM-01, OM-02, OM-03.
-- **States**: loading (viewer skeleton + right-pane skeleton); doc-unreadable state per document « Document illisible — impossible d'afficher. Téléchargez-le ou demandez un nouvel envoi. »; error; permission-denied (ops: checklist disabled, footer bar hidden); already-decided banner info-600 « Dossier déjà traité par {nom} le {date}. Lecture seule. »
+- **States**: loading (viewer skeleton + right-pane skeleton); doc-unreadable state per document « Document illisible — impossible d'afficher. Téléchargez-le ou demandez un nouvel envoi. »; error; permission-denied (finance-admin: checklist disabled, footer bar hidden); already-decided banner info-600 « Dossier déjà traité par {nom} le {date}. Lecture seule. »
 - **Events/notifications triggered**: approve/reject/request-info → merchant notifications (push + e-mail + SMS per docs/08 §C "KYB approved / rejected"); `audit_logs` entry each decision; bell aux compliance sur réassignation.
 
 ### O-05 — Marchands / Merchants
@@ -162,7 +162,7 @@ Left sidebar 240px (collapsible): Accueil `layout-dashboard` · File KYB `badge-
 | Copier l'ID marchand | `copy` | tous | Presse-papiers + toast « ID copié » |
 
 - **Modals/drawers/sheets opened**: OM-04, OM-05, OM-06, OM-10 (read-only), OM-14.
-- **States**: loading per-tab skeletons; empty per tab (Activité : « Aucune activité pour ce marchand. » · Risque : « Aucun drapeau de risque. » · Notes : « Aucune note interne. »); error; permission-denied: action bar hidden for non-eligible roles; **suspended banner** danger-600 sticky « Marchand suspendu le {date} par {maker}, approuvé par {checker} — motif : {motif} »; pending-DC banner warning-600 outlined « Une demande (suspension / limites) attend une seconde approbation » avec lien O-17.
+- **States**: loading per-tab skeletons; empty per tab (Activité : « Aucune activité pour ce marchand. » · Risque : « Aucun drapeau de risque. » · Notes : « Aucune note interne. »); error; permission-denied: action bar hidden for non-eligible roles; **suspended banner** danger-600 sticky « Marchand suspendu le {date} par {maker}, approuvé par {checker} — portée : {portée} — motif : {motif} »; pending-DC banner warning-600 outlined « Une demande (suspension / limites) attend une seconde approbation » avec lien O-17.
 - **Events/notifications triggered**: suspension approve → merchant e-mail + push « Votre compte est suspendu — contactez le support » ; limit change approve → e-mail marchand ; note → aucune ; toutes actions → `audit_logs`.
 
 ### O-07 — Recherche transactions / Transactions Search
@@ -397,8 +397,8 @@ Left sidebar 240px (collapsible): Accueil `layout-dashboard` · File KYB `badge-
 - **Events/notifications triggered**: soumission → bell + e-mail approbateurs ; `audit_logs`.
 
 ### O-17 — Approbations / Dual-Control Approvals
-- **Route**: `/approvals` · **Icon**: lucide `check-check` · **Access**: any role with approver rights on ≥ 1 request type (ajustements & limites : finance-admin, ops-admin ; suspensions & disjoncteurs : ops-admin) · **Purpose**: single queue where second approvers action every pending dual-control request.
-- **Layout zones**: header (count + SLA 4 h summary) · toolbar (type : ajustement / limites / suspension / disjoncteur ; demandeur ; tri SLA) · requests table · aside « Mes demandes » (as maker : statut de mes propres demandes, non approuvables par moi).
+- **Route**: `/approvals` · **Icon**: lucide `check-check` · **Access**: any role with approver rights on ≥ 1 request type (ajustements & limites : finance-admin, ops-admin ; suspensions, disjoncteurs & paliers 2 : ops-admin) · **Purpose**: single queue where second approvers action every pending dual-control request.
+- **Layout zones**: header (count + SLA 4 h summary) · toolbar (type : ajustement / limites / suspension / disjoncteur / palier 2 ; demandeur ; tri SLA) · requests table · aside « Mes demandes » (as maker : statut de mes propres demandes, non approuvables par moi).
 - **Tabs**: none.
 - **Data displayed**: `GET /internal/v1/approval_requests?status=pending` — type, résumé FR (« Ajustement 250 000 FCFA — merchant_available → adjustments — Boulangerie Ngong »), demandeur, créé le, SLA chip (4 h), expire à. Rows where maker = me are greyed with tag « Votre demande — un autre approbateur est requis ».
 - **Inputs**: none.
@@ -407,7 +407,7 @@ Left sidebar 240px (collapsible): Accueil `layout-dashboard` · File KYB `badge-
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
 | Examiner & décider | `check-check` | approbateur éligible ≠ demandeur | Ouvre OM-11 (détail complet + OM-10 si monétaire) |
-| Voir l'objet lié | `search` | tous approbateurs | Navigue vers O-06 / O-11 / O-15 selon le type |
+| Voir l'objet lié | `search` | tous approbateurs | Navigue vers O-04 / O-06 / O-11 / O-15 selon le type |
 | Annuler ma demande | `circle-x` | demandeur uniquement | Confirm « Annuler cette demande ? » → `POST /internal/v1/approval_requests/{id}/cancel` |
 
 - **Modals/drawers/sheets opened**: OM-10, OM-11.
@@ -478,12 +478,78 @@ Left sidebar 240px (collapsible): Accueil `layout-dashboard` · File KYB `badge-
 - **States**: loading; error save « Échec de l'enregistrement (req {request_id}). Vos modifications sont conservées à l'écran. » ; permission-denied (compliance : seuls les SLA sont éditables, reste en lecture seule ; autres rôles : page entière lecture seule avec bannière « Lecture seule — réservé à ops-admin ») ; unsaved-changes guard « Modifications non enregistrées — quitter quand même ? ».
 - **Events/notifications triggered**: tout changement → `audit_logs` + bell ops-admin.
 
+### O-21 — Page introuvable / 404
+- **Route**: toute route inconnue de `ops.ijimpay.com` · **Icon**: lucide `search` (illustration de la banque d'illustrations, pas une icône agrandie) · **Access**: all roles (staff authentifié ; sinon redirection O-01) · **Purpose**: dead-end recovery (miroir de D-45, docs/12).
+- **Layout zones**: illustration centrée + titre + actions ; sans sidebar si la session est invalide.
+- **Tabs**: none.
+- **Data displayed**: aucune. Copy : « Page introuvable. Cette page n'existe pas ou a été déplacée. »
+- **Inputs**: none.
+- **Actions**:
+
+| Action (FR) | Icône | Rôle requis | Comportement |
+|---|---|---|---|
+| Retour à l'accueil | `layout-dashboard` (primary) | tous | → `/` (O-02) |
+| Recherche globale | `search` | tous | Ouvre le ⌘K (marchand, ref charge, téléphone, provider_ref) |
+
+- **Modals/drawers/sheets opened**: none.
+- **States**: statique.
+- **Events/notifications triggered**: none.
+
+### O-22 — Erreur serveur / 500
+- **Route**: rendue sur erreur applicative irrécupérable · **Icon**: lucide `triangle-alert` · **Access**: all roles · **Purpose**: fail gracefully with a support handle (miroir de D-46, docs/12).
+- **Layout zones**: illustration + titre + `request_id` monospace copiable.
+- **Tabs**: none.
+- **Data displayed**: `request_id` de la réponse en erreur. Copy : « Une erreur est survenue de notre côté. Réessayez ; si le problème persiste, transmettez ce code à l'équipe plateforme : req_8fK2… »
+- **Inputs**: none.
+- **Actions**:
+
+| Action (FR) | Icône | Rôle requis | Comportement |
+|---|---|---|---|
+| Réessayer | `rotate-cw` (primary) | tous | Recharge la route courante |
+| Copier le code | `copy` | tous | Presse-papiers + toast « Code copié » |
+
+- **Modals/drawers/sheets opened**: none.
+- **States**: statique.
+- **Events/notifications triggered**: erreur remontée au monitoring interne (invisible) ; jamais dans `audit_logs` (pas une action staff).
+
+### O-23 — Maintenance / Maintenance
+- **Route**: servie par l'edge pendant une maintenance planifiée de la console · **Icon**: lucide `wrench` · **Access**: all roles · **Purpose**: planned downtime message (miroir de D-47, docs/12).
+- **Layout zones**: illustration + titre + fenêtre horaire.
+- **Tabs**: none.
+- **Data displayed**: fenêtre de maintenance (config edge). Copy : « Maintenance en cours. La console ops revient vers {heure}. Les paiements marchands ne sont pas affectés. » + lien statut status.ijimpay.com.
+- **Inputs**: none.
+- **Actions**:
+
+| Action (FR) | Icône | Rôle requis | Comportement |
+|---|---|---|---|
+| Voir la page de statut | `activity` | tous | → status.ijimpay.com (nouvel onglet) |
+
+- **Modals/drawers/sheets opened**: none.
+- **States**: auto-refresh toutes les 60 s.
+- **Events/notifications triggered**: none.
+
+### O-24 — Session expirée / Forced logout
+- **Route**: interception globale sur 401 (toast + redirection `/login?reason=expired`) · **Icon**: lucide `log-in` · **Access**: all roles · **Purpose**: expel an expired/revoked staff session (durée 8 h, O-01) without losing work context (miroir de D-48, docs/12) — remplace le simple toast session-expired de O-01, qui reste l'écran d'atterrissage.
+- **Layout zones**: toast danger persistant « Session expirée — reconnectez-vous. » puis page O-01 avec bandeau info ; le deep-link d'origine est mémorisé et restauré après reconnexion (SSO + clé de sécurité complets exigés — pas de reprise de session).
+- **Tabs**: none.
+- **Data displayed**: aucune.
+- **Inputs**: none.
+- **Actions**:
+
+| Action (FR) | Icône | Rôle requis | Comportement |
+|---|---|---|---|
+| Se reconnecter | `log-in` (primary, dans le toast) | tous | → `/login` (O-01) ; retour à la page d'origine après succès |
+
+- **Modals/drawers/sheets opened**: none.
+- **States**: brouillons en cours (O-16 ajustement, formulaires de résolution O-10) conservés en localStorage 15 min et restaurés avec toast « Brouillon restauré. » — jamais pour les champs sensibles (motifs de suspension, décisions DC).
+- **Events/notifications triggered**: `audit_logs` session_expired (expulsion serveur).
+
 ---
 
 ## Modals & Drawers/Sheets
 
 ### OM-01 — Rejeter le dossier KYB / KYB Rejection (reason-template library)
-- **Opened from**: O-04 · **Type**: modal (560px) · **Roles**: compliance.
+- **Opened from**: O-04 · **Type**: modal (560px) · **Roles**: ops, compliance (per O-04 access).
 - **Contents**: merchant name + palier demandé restated; template picker; message preview exactly as the merchant will receive it (e-mail + in-dashboard, FR shown, EN toggle `globe`).
 - **FR reason-template library** (code → texte envoyé au marchand ; {placeholders} remplis avant envoi) :
   - `doc_illisible` — « Le document « {document} » est illisible ou incomplet. Merci de le re-photographier à plat, en pleine lumière, puis de le renvoyer depuis Paramètres → Vérification. »
@@ -506,32 +572,32 @@ Left sidebar 240px (collapsible): Accueil `layout-dashboard` · File KYB `badge-
 
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
-| Envoyer le rejet | `circle-x` | compliance | `POST /internal/v1/kyb/reviews/{id}/reject` `{template_codes[], custom_text, document_ids[]}` ; dossier clos ; marchand notifié (push+e-mail+SMS) ; les documents rejetés passent « à renvoyer » côté marchand (docs/08 A10 Verification) |
-| Annuler | `arrow-left` | compliance | Ferme sans effet |
+| Envoyer le rejet | `circle-x` | ops, compliance | `POST /internal/v1/kyb/reviews/{id}/reject` `{template_codes[], custom_text, document_ids[]}` ; dossier clos ; marchand notifié (push+e-mail+SMS) ; les documents rejetés passent « à renvoyer » côté marchand (docs/08 A10 Verification) |
+| Annuler | `arrow-left` | ops, compliance | Ferme sans effet |
 
 - **Confirm rules**: bouton d'envoi jamais focus par défaut ; l'aperçu du message doit avoir été affiché (scroll) avant activation du bouton.
 
 ### OM-02 — Approuver le palier / Approve Tier
-- **Opened from**: O-04 · **Type**: modal · **Roles**: compliance.
+- **Opened from**: O-04 · **Type**: modal · **Roles**: ops, compliance (maker) ; **palier 2 : règle DC** — approbateur ops-admin ≠ maker (F-047, docs/08 §B). Une seule règle : Palier 1 = décision simple ; tout octroi de Palier 2 (limites standard ou personnalisées) = dual-control via O-17.
 - **Contents**: restates merchant + checklist state (toutes concordances ✓ requises sinon modal refuse de s'ouvrir : toast « Complétez la liste de vérification. »); limit preview for chosen tier.
 - **Inputs**:
 
 | Champ (FR) | Type | Validation | Défaut | Message d'erreur (FR) |
 |---|---|---|---|---|
 | Palier accordé | select 1 / 2 | ≤ palier demandé | palier demandé | « Le palier accordé ne peut dépasser le palier demandé. » |
-| Limites appliquées | select : Limites standard du palier / Personnalisées | personnalisées → ouvre les champs d'OM-04 et applique la règle DC | standard | — |
+| Limites appliquées | select : Limites standard du palier / Personnalisées | personnalisées → ouvre les champs d'OM-04 ; incluses dans la même demande DC que le palier (jamais une seconde demande séparée) | standard | — |
 
 - **Actions**:
 
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
-| Confirmer l'approbation | `circle-check` | compliance | `POST /internal/v1/kyb/reviews/{id}/approve` `{tier, limits}` ; merchants.tier mis à jour ; notifications marchand ; si limites personnalisées → crée aussi une demande DC (O-17) et applique les limites standard en attendant |
-| Annuler | `arrow-left` | compliance | Ferme |
+| Confirmer l'approbation | `circle-check` | ops, compliance | **Palier 1** : `POST /internal/v1/kyb/reviews/{id}/approve` `{tier, limits}` — merchants.tier mis à jour immédiatement, notifications marchand (N-04). **Palier 2** : le même appel crée une demande d'approbation `pending_approval` (O-17, approbateur ops-admin ≠ maker, règle DC — F-047) couvrant palier **et** limites ; rien n'est appliqué avant la seconde approbation, le marchand reste à son palier actuel ; à l'approbation : tier 2 + limites appliqués atomiquement, notifications marchand (N-06) |
+| Annuler | `arrow-left` | ops, compliance | Ferme |
 
-- **Confirm rules**: restates « Palier {n} — plafond encaissement {x} FCFA/jour, paiements sortants {y} FCFA/jour » ; bouton non focus par défaut.
+- **Confirm rules**: restates « Palier {n} — plafond encaissement {x} FCFA/jour, paiements sortants {y} FCFA/jour » ; pour le palier 2, le bouton est libellé « Soumettre pour approbation » et le récapitulatif ajoute « Un ops-admin devra approuver (règle DC). » ; bouton non focus par défaut.
 
 ### OM-03 — Demander des informations / Request More Info (KYB)
-- **Opened from**: O-04 · **Type**: modal · **Roles**: compliance.
+- **Opened from**: O-04 · **Type**: modal · **Roles**: ops, compliance (per O-04 access).
 - **Inputs**:
 
 | Champ (FR) | Type | Validation | Défaut | Message d'erreur (FR) |
@@ -543,8 +609,8 @@ Left sidebar 240px (collapsible): Accueil `layout-dashboard` · File KYB `badge-
 
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
-| Envoyer la demande | `message-square` | compliance | `POST /internal/v1/kyb/reviews/{id}/request_info` ; dossier → « infos demandées », SLA en pause jusqu'à nouvel upload marchand (reprend automatiquement) ; notifications marchand |
-| Annuler | `arrow-left` | compliance | Ferme |
+| Envoyer la demande | `message-square` | ops, compliance | `POST /internal/v1/kyb/reviews/{id}/request_info` ; dossier → « infos demandées », SLA en pause jusqu'à nouvel upload marchand (reprend automatiquement) ; notifications marchand |
+| Annuler | `arrow-left` | ops, compliance | Ferme |
 
 - **Confirm rules**: aperçu du message obligatoire avant envoi.
 
@@ -571,21 +637,21 @@ Left sidebar 240px (collapsible): Accueil `layout-dashboard` · File KYB `badge-
 
 ### OM-05 — Suspendre / Réactiver le marchand / Suspend–Reactivate (dual-control)
 - **Opened from**: O-06 · **Type**: modal danger · **Roles**: ops-admin maker + ops-admin checker (règle DC, jamais le même).
-- **Contents**: restates merchant name, solde disponible, volume 30 j ; texte d'impact « La suspension bloque immédiatement l'API (toutes les créations renvoient `permission_denied`), le dashboard passe en lecture seule, les règlements sont gelés. »
+- **Contents**: restates merchant name, solde disponible, volume 30 j ; texte d'impact dynamique selon la portée choisie (F-048) — **Encaissements uniquement** : « Les créations de charges renvoient `permission_denied` ; paiements sortants et règlements continuent. » · **Tout (encaissements + paiements sortants)** : « Encaissements et paiements sortants bloqués ; les paiements sortants sont masqués côté marchand avec bannière ; les règlements continuent. » · **Gel total (règlements inclus)** : « API entièrement bloquée, dashboard en lecture seule, règlements gelés. » Dans tous les cas : soldes gelés, jamais saisis (aucune écriture ledger).
 - **Inputs**:
 
 | Champ (FR) | Type | Validation | Défaut | Message d'erreur (FR) |
 |---|---|---|---|---|
 | Motif | select : Fraude suspectée / Demande d'autorité / Impayés / Violation des CGU / Autre | requis | vide | « Choisissez un motif. » |
 | Détail du motif | texte long | requis, ≥ 30 caractères | vide | « Détaillez le motif (30 caractères minimum). » |
-| Geler aussi les règlements en cours | case à cocher | — | coché | — |
+| Portée de la suspension | select : Encaissements uniquement / Tout (encaissements + paiements sortants) / Gel total (règlements inclus) | requise | Gel total (règlements inclus) | « Choisissez la portée de la suspension. » |
 | Saisir le nom du marchand pour confirmer | texte | doit égaler le nom exact | vide | « Le nom saisi ne correspond pas. » |
 
 - **Actions**:
 
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
-| Demander la suspension | `octagon-pause` | ops-admin | `POST /internal/v1/merchants/{id}/suspension_requests` → `pending_approval`, O-17 ; rien ne change tant que non approuvé (sauf urgence : cocher « Gel immédiat 4 h » qui coupe l'API à titre conservatoire en attendant l'approbation, auto-levé si rejet/expiration) |
+| Demander la suspension | `octagon-pause` | ops-admin | `POST /internal/v1/merchants/{id}/suspension_requests` `{scope}` → `pending_approval`, O-17 ; rien ne change tant que non approuvé (sauf urgence : cocher « Gel immédiat 4 h » qui coupe l'API à titre conservatoire en attendant l'approbation, auto-levé si rejet/expiration) ; à l'approbation, seule la portée demandée est bloquée (suspension partielle : les encaissements continuent — F-048) ; N-26 au Owner mentionne la portée `{scope}` |
 | Annuler | `arrow-left` | ops-admin | Ferme |
 
 - **Confirm rules**: name-typing confirmation obligatoire ; bouton danger, jamais focus par défaut ; la variante Réactiver réutilise ce modal (motif select réduit à « Résolution du motif initial / Décision interne », sans name-typing).
@@ -752,7 +818,7 @@ Left sidebar 240px (collapsible): Accueil `layout-dashboard` · File KYB `badge-
 
 ## API additions needed
 
-None of the following exists in docs/02 (which covers the merchant API only). All are internal, served at `https://api.ijimpay.com/internal/v1` (staff session auth + WebAuthn step-up where noted), to be specified in a future `docs/14-internal-api.md`:
+None of the following exists in docs/02 (which covers the merchant API only). All are internal, served at `https://api.ijimpay.com/internal/v1` (staff session auth + WebAuthn step-up where noted), to be specified in a future `docs/17-internal-api.md` (14–16 are already taken by the checkout pages, mobile screens and flows catalog):
 
 - `GET /internal/v1/auth/sso/start` · `POST /internal/v1/auth/webauthn/verify` · `GET /internal/v1/staff/me`
 - `GET /internal/v1/queues/summary`
@@ -782,11 +848,13 @@ To be added to the canonical map in docs/07 §4 (one icon = one meaning):
 - `octagon-pause` — suspend / circuit-breaker (destructive pause, distinct from `clock` pending)
 - `book-text` — ledger adjustments / manual journal entries
 - `rotate-cw` — retry / re-poll / redeliver (used in docs/08 prose, absent from the docs/07 map)
+- `wrench` — maintenance page (already used by docs/12 D-47; O-23 here)
+- `log-in` — sign back in / reconnect (already used by docs/12 D-48; O-24 here — distinct from `log-out` sign out)
 
 Also note: a 9th badge style `draft` (ink-500 outline) is used by O-15 listings only if adjustments ever expose drafts; v1 keeps the canonical 8 statuses and maps adjustment states onto them as specified in O-15.
 
 ---
 
 ```
-INVENTORY: pages=20 tabs=19 modals=14 forms=21 tables=31 actions=84
+INVENTORY: pages=24 tabs=19 modals=14 forms=21 tables=31 actions=90
 ```

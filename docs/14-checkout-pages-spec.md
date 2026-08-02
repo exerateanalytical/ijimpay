@@ -104,7 +104,7 @@ Card anatomy: ChannelChip (logo dot + label, 24px) · instruction text 16px · U
 | Payer 15 000 FCFA (CTA; EN "Pay 15 000 FCFA") | — | public | → C-08, amount carried; emits `amount_entered` (fixed) |
 
 - **Modals/drawers/sheets opened**: none.
-- **States**: **loading** — skeleton (logo circle, 2 text lines, amount block); **error** (link fetch fails) → C-22; single-channel note FR "Ce commerçant accepte uniquement {MTN Mobile Money\|Orange Money}." / EN "This merchant only accepts {…}."; inactive → C-05; expired → C-06; already paid (single-use) → C-07; not found → C-21.
+- **States**: **loading** — skeleton (logo circle, 2 text lines, amount block); **error** (link fetch fails) → C-22; single-channel note FR "Ce commerçant accepte uniquement {MTN Mobile Money\|Orange Money}." / EN "This merchant only accepts {…}."; **both channels down** (every merchant-accepted channel reported `down` by `GET /v1/channels`) — blocked state shared by C-01/C-02/C-03/C-04: CTA disabled + `triangle-alert` banner (`warning-600` tint) FR "MTN Mobile Money et Orange Money sont indisponibles actuellement. Aucun paiement n'est possible pour le moment — réessayez dans quelques minutes. Aucun montant n'a été débité." / EN "MTN Mobile Money and Orange Money are currently unavailable. No payment is possible right now — try again in a few minutes. Nothing was charged." (single-channel merchant: banner names only that channel); page re-checks channel status every 60 s and lifts the block automatically; inactive → C-05; expired → C-06; already paid (single-use) → C-07; not found → C-21.
 - **Events/notifications**: analytics `link_viewed` `{slug, merchant_id, amount_type:"fixed", channel_options, referrer, in_app_browser:bool, lang}`; `cta_pay_clicked` `{slug}`.
 
 ### C-02 — Lien de paiement, montant libre / Payment link landing, open amount
@@ -125,7 +125,7 @@ Card anatomy: ChannelChip (logo dot + label, 24px) · instruction text 16px · U
 | Payer (devient « Payer 12 500 FCFA » dès saisie valide; EN "Pay …") | — | public | disabled until valid; → C-08; emits `amount_entered` `{amount, amount_type:"open"}` |
 
 - **Modals/drawers/sheets opened**: none.
-- **States**: loading skeleton as C-01; inline validation error (above); inactive/expired/paid/not-found → C-05/C-06/C-07/C-21; error → C-22.
+- **States**: loading skeleton as C-01; inline validation error (above); both channels down → blocked state as C-01 (input + CTA disabled); inactive/expired/paid/not-found → C-05/C-06/C-07/C-21; error → C-22.
 - **Events/notifications**: `link_viewed` `{amount_type:"open", ...}`, `amount_entered`, `amount_validation_error` `{reason:"below_min"|"above_max"}`.
 
 ### C-03 — Lien catalogue avec quantité / Catalog link with quantity
@@ -148,7 +148,7 @@ Card anatomy: ChannelChip (logo dot + label, 24px) · instruction text 16px · U
 | Payer 10 500 FCFA (EN "Pay …") | — | public | → C-08 with qty in charge `metadata.quantity`; `amount_entered` `{amount, quantity}` |
 
 - **Modals/drawers/sheets opened**: none.
-- **States**: as C-01 (loading/inactive/expired/paid/not-found/error); image load failure → grey placeholder block with `shopping-cart` glyph, no broken-image icon.
+- **States**: as C-01 (loading/inactive/expired/paid/not-found/error/both-channels-down); image load failure → grey placeholder block with `shopping-cart` glyph, no broken-image icon.
 - **Events/notifications**: `link_viewed` `{amount_type:"catalog"}`, `quantity_changed` `{quantity}`, `amount_entered`.
 
 ### C-04 — Session de paiement e-commerce / Checkout session landing
@@ -166,7 +166,7 @@ Card anatomy: ChannelChip (logo dot + label, 24px) · instruction text 16px · U
 | Retour à {merchant} (EN "Back to {merchant}") | `arrow-left` | public | opens CM-04 cancel confirm; on confirm redirect to `cancel_url`, session marked abandoned |
 
 - **Modals/drawers/sheets opened**: CM-04, CM-06.
-- **States**: loading skeleton; **session expired** → C-06 variant with FR "Cette session a expiré. Retournez à la boutique pour recommencer." / EN "This session has expired. Return to the shop to start again." + button to `cancel_url`; session already completed → redirect to `/pay/{charge_id}` (C-10); not found → C-21; error → C-22.
+- **States**: loading skeleton; **both channels down** → blocked state as C-01 (CTA disabled, banner; « Retour à {merchant} » stays available); **session expired** → C-06 variant with FR "Cette session a expiré. Retournez à la boutique pour recommencer." / EN "This session has expired. Return to the shop to start again." + button to `cancel_url`; session already completed → redirect to `/pay/{charge_id}` (C-10); not found → C-21; error → C-22.
 - **Events/notifications**: `link_viewed` `{surface:"session", session_id}`, `order_summary_opened`, `checkout_canceled` `{stage:"landing"}`; abandonment fires merchant webhook per docs/09 flow (server-side).
 
 ### C-05 — Lien inactif / Inactive (deactivated) link
@@ -238,7 +238,7 @@ Card anatomy: ChannelChip (logo dot + label, 24px) · instruction text 16px · U
 | Retour (EN "Back") | `arrow-left` | public | back to landing, amount preserved |
 
 - **Modals/drawers/sheets opened**: CM-01.
-- **States**: **loading** (CTA spinner replaces label, width fixed, all inputs disabled); **unknown prefix** → detection zone forces manual pick (both chips shown, none selected, CTA disabled with helper FR "Choisissez votre opérateur." / EN "Choose your operator."); **channel not accepted by merchant** → FR "Ce commerçant n'accepte pas {Orange Money}. Utilisez un numéro {MTN}." / EN equivalent; **`channel_unavailable`** inline banner `triangle-alert` FR "Orange Money est indisponible actuellement. Réessayez plus tard ou utilisez un numéro MTN." (channel names swapped as appropriate); **`rate_limited`** → C-13; **network failure** → inline retry banner FR "Connexion impossible. Vérifiez votre réseau et réessayez." / EN "Could not connect. Check your network and try again."; other 4xx/5xx → generic FR "Une erreur est survenue. Réessayez ou contactez le commerçant."
+- **States**: **loading** (CTA spinner replaces label, width fixed, all inputs disabled); **unknown prefix** → detection zone forces manual pick (both chips shown, none selected, CTA disabled with helper FR "Choisissez votre opérateur." / EN "Choose your operator."); **channel not accepted by merchant** → FR "Ce commerçant n'accepte pas {Orange Money}. Utilisez un numéro {MTN}." / EN equivalent; **`channel_unavailable`** inline banner `triangle-alert` FR "Orange Money est indisponible actuellement. Réessayez plus tard ou utilisez un numéro MTN." (channel names swapped as appropriate); **both channels down** (every merchant-accepted channel `down` per `GET /v1/channels`, or `channel_unavailable` with no alternative channel) → blocked state as C-01: phone field + CTA disabled, `triangle-alert` banner with the C-01 both-channels-down copy, auto re-check every 60 s; **`rate_limited`** → C-13; **network failure** → inline retry banner FR "Connexion impossible. Vérifiez votre réseau et réessayez." / EN "Could not connect. Check your network and try again."; other 4xx/5xx → generic FR "Une erreur est survenue. Réessayez ou contactez le commerçant."
 - **Events/notifications**: `phone_submitted` `{channel, channel_detected:bool, channel_overridden:bool}` · `charge_created` `{charge_id, channel, amount}` · `charge_create_failed` `{error_code}` · `channel_changed`.
 
 ### C-09 — En attente d'approbation / Waiting for approval
@@ -251,7 +251,7 @@ Card anatomy: ChannelChip (logo dot + label, 24px) · instruction text 16px · U
 
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
-| Renvoyer la demande (appears at 2 min, allowed once; EN "Resend the request") | `repeat` | public | opens CM-03; on confirm: cancel + recreate charge (see API additions), stay on C-09 with reset countdown |
+| Renvoyer la demande (appears at 2 min, allowed once; EN "Resend the request") | `rotate-cw` *(icon addition)* | public | opens CM-03; on confirm: cancel + recreate charge (see API additions), stay on C-09 with reset countdown |
 | Changer de numéro (appears at 2 min; EN "Change number") | `pencil` | public | opens CM-02 |
 | Annuler le paiement (sessions only; EN "Cancel payment") | `arrow-left` | public | opens CM-04; on confirm → `cancel_url` |
 | Un problème ? Contactez {merchant} (EN "A problem? Contact {merchant}") | `life-buoy` | public | opens CM-05 |
@@ -294,7 +294,7 @@ Card anatomy: ChannelChip (logo dot + label, 24px) · instruction text 16px · U
 
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
-| Réessayer (EN "Try again") | `repeat` | public | → C-08 prefilled (same phone/channel/amount); new charge on submit |
+| Réessayer (EN "Try again") | `rotate-cw` *(icon addition)* | public | → C-08 prefilled (same phone/channel/amount); new charge on submit |
 | Changer de numéro ou d'opérateur (EN "Change number or operator") | `pencil` | public | → C-08 with phone cleared, CM-01 opened |
 | Retour à la boutique (sessions; EN "Back to the shop") | `arrow-left` | public | redirect `cancel_url` |
 | Contacter le commerçant (EN "Contact the merchant") | `life-buoy` | public | opens CM-05 |
@@ -313,7 +313,7 @@ Card anatomy: ChannelChip (logo dot + label, 24px) · instruction text 16px · U
 
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
-| Réessayer (EN "Try again") | `repeat` | public | → C-08 prefilled; new charge |
+| Réessayer (EN "Try again") | `rotate-cw` *(icon addition)* | public | → C-08 prefilled; new charge |
 | Changer de numéro (EN "Change number") | `pencil` | public | → C-08, phone cleared |
 | Contacter le commerçant (EN "Contact the merchant") | `life-buoy` | public | opens CM-05 |
 
@@ -331,7 +331,7 @@ Card anatomy: ChannelChip (logo dot + label, 24px) · instruction text 16px · U
 
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
-| Actualiser (enabled when countdown hits 0; EN "Refresh") | `repeat` | public | retries `POST /charges` with a new Idempotency-Key; success → C-09 |
+| Actualiser (enabled when countdown hits 0; EN "Refresh") | `rotate-cw` *(icon addition)* | public | retries `POST /charges` with a new Idempotency-Key; success → C-09 |
 | Contacter le commerçant (EN "Contact the merchant") | `life-buoy` | public | opens CM-05 |
 
 - **Modals/drawers/sheets opened**: CM-05.
@@ -342,7 +342,7 @@ Card anatomy: ChannelChip (logo dot + label, 24px) · instruction text 16px · U
 - **Route**: `/r/{receipt_id}` (public, unguessable, no auth, **zero JS required**) · **Icon**: lucide `receipt` · **Access**: public (payer, merchant, anyone verifying) · **Purpose**: tamper-proof payment proof — the anti-fake-receipt story; QR target on thermal receipts.
 - **Layout zones**: header · **verified banner** (`badge-check` on `brand-100`): FR "Paiement vérifié par Ijim Pay" / EN "Payment verified by Ijim Pay" · receipt card · items table (session payments only) · anti-fraud note · actions · footer.
 - **Tabs**: none.
-- **Data displayed** (all from receipt resource — see API additions; mirrors `charge`): merchant name + logo · amount (40px) · StatusBadge (`succeeded` normally; `refunded` — `undo-2` `ink-500` — shown with FR "Remboursé le {date}" / EN "Refunded on {date}" when a linked refund exists) · référence (`charge.reference`) · Ijim Pay ref (`charge.id` short) · date `fr-CM` · ChannelChip · payer number partially masked "6 70 •• •• 00" · session items table (Article | Qté | Montant). Anti-fraud note: FR "Vérifiez toujours vos reçus sur pay.ijimpay.com — un vrai reçu Ijim Pay s'ouvre toujours sur cette adresse." / EN "Always verify your receipts on pay.ijimpay.com — a genuine Ijim Pay receipt always opens at this address."
+- **Data displayed** (all from receipt resource — see API additions; mirrors `charge`): merchant name + logo · amount (40px) · StatusBadge (`succeeded` normally; `refunded` — `undo-2` `ink-500` — with FR "Remboursé le {date}" / EN "Refunded on {date}" **only when the linked refunds total the full charge amount** — per docs/02 §2.1 refunds never mutate the charge, so a partial refund leaves the charge `succeeded`: the badge then stays `succeeded` and the card adds a line `undo-2` FR "Remboursé partiellement : {x} FCFA le {date}" / EN "Partially refunded: {x} FCFA on {date}"; multiple partial refunds: one line per refund, most recent first) · référence (`charge.reference`) · Ijim Pay ref (`charge.id` short) · date `fr-CM` · ChannelChip · payer number partially masked "6 70 •• •• 00" · session items table (Article | Qté | Montant). Anti-fraud note: FR "Vérifiez toujours vos reçus sur pay.ijimpay.com — un vrai reçu Ijim Pay s'ouvre toujours sur cette adresse." / EN "Always verify your receipts on pay.ijimpay.com — a genuine Ijim Pay receipt always opens at this address."
 - **Inputs**: none.
 - **Actions**:
 
@@ -387,7 +387,7 @@ Card anatomy: ChannelChip (logo dot + label, 24px) · instruction text 16px · U
 
 - **Tabs**: none. · **Data displayed**: same receipt resource as C-14. · **Inputs**: none. · **Actions**: none (static document).
 - **Modals/drawers/sheets opened**: none.
-- **States**: refunded charges print line 9 as "REMBOURSE / REFUNDED" plus line 9b "Remboursé le / Refunded on {date}". PDF ≤ 80 KB; QR error-correction level M.
+- **States**: **fully refunded** charges (linked refunds total the full amount) print line 9 as "REMBOURSE / REFUNDED" plus line 9b "Remboursé le / Refunded on {date}"; **partially refunded** charges keep line 9 "PAYE / PAID" and add line 9b "Rembourse partiellement / Partially refunded: {x} FCFA — {date}" (one line per partial refund), matching C-14. PDF ≤ 80 KB; QR error-correction level M.
 - **Events/notifications**: server logs `receipt_pdf_generated` `{receipt_id}`.
 
 ### C-16 — Affiche QR comptoir A6 / Static counter QR — A6 print layout
@@ -481,7 +481,7 @@ Card anatomy: ChannelChip (logo dot + label, 24px) · instruction text 16px · U
 
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
-| Réessayer (EN "Try again") | `repeat` | public | full reload of the intended route |
+| Réessayer (EN "Try again") | `rotate-cw` *(icon addition)* | public | full reload of the intended route |
 
 - **Modals/drawers/sheets opened**: none.
 - **States**: **5xx** — FR "**Un problème de notre côté**" · body "Nos serveurs rencontrent un souci. Votre argent n'a pas été débité tant que vous n'avez pas confirmé sur votre téléphone. Réessayez dans un instant." / EN "**A problem on our side**" · "Our servers hit a snag. No money leaves your account until you confirm on your phone. Try again in a moment." · **maintenance** — FR "**Maintenance en cours**" · "Nous revenons dans quelques minutes." / EN "**Maintenance in progress**" · "We'll be back in a few minutes." Zero-JS, HTTP 503 with Retry-After.
@@ -518,7 +518,7 @@ All are bottom sheets on mobile (< 768px) and centered modals otherwise; backdro
 - Opened from: C-09 (« Renvoyer la demande », once only).
 - Content: title FR "Renvoyer la demande ?" / EN "Resend the request?" · body FR "L'ancienne demande sera annulée et une nouvelle sera envoyée au 6 70 00 00 00. Vous ne pouvez renvoyer qu'une seule fois." / EN "The old request will be cancelled and a new one sent to 6 70 00 00 00. You can only resend once." · amount restated "Montant : 15 000 FCFA".
 - Inputs: none.
-- Actions: **Renvoyer** / EN "Resend" (`repeat`) — cancel + recreate charge, C-09 countdown resets, button permanently removed after use · **Annuler** / EN "Cancel".
+- Actions: **Renvoyer** / EN "Resend" (`rotate-cw`) — cancel + recreate charge, C-09 countdown resets, button permanently removed after use · **Annuler** / EN "Cancel".
 - Confirm rules: cancel button default-focused (money-adjacent).
 - Events: `charge_resent` `{attempt:2}`.
 
@@ -568,7 +568,7 @@ Common properties on every event: `merchant_id, mode(test|live), surface(hosted|
 
 # Icon additions needed (not in docs/07 map)
 
-`minus-circle` (quantity decrement — pairs with existing `plus-circle`) · `chevron-down` (accordion) · `external-link` (open in browser / fallback redirect) · `x` (widget modal close) · `phone` (call merchant in CM-05).
+`minus-circle` (quantity decrement — pairs with existing `plus-circle`) · `chevron-down` (accordion) · `external-link` (open in browser / fallback redirect) · `x` (widget modal close) · `phone` (call merchant in CM-05) · `rotate-cw` (retry/resend — same meaning as docs/12/13/15/16; `repeat` stays reserved for Subscription per docs/07 §4).
 
 ```
 INVENTORY: pages=22 tabs=0 modals=6 forms=4 tables=2 actions=54
