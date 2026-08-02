@@ -669,7 +669,7 @@ Left sidebar 240px (collapsible): Accueil `layout-dashboard` · File KYB `badge-
 
 | Action (FR) | Icône | Rôle requis | Comportement |
 |---|---|---|---|
-| Ouvrir la session lecture seule | `eye` | ops-admin | `POST /internal/v1/merchants/{id}/impersonate` `{reason}` → URL app.ijimpay.com à jeton unique 30 min ; nouvelle fenêtre ; toutes les mutations y sont désactivées côté serveur |
+| Ouvrir la session lecture seule | `venetian-mask` | ops-admin | `POST /internal/v1/merchants/{id}/impersonate` `{reason}` → URL app.ijimpay.com à jeton unique 30 min ; nouvelle fenêtre ; toutes les mutations y sont désactivées côté serveur |
 | Annuler | `arrow-left` | ops-admin | Ferme |
 
 - **Confirm rules**: re-authentification WebAuthn exigée avant ouverture.
@@ -843,7 +843,7 @@ Data-model additions needed (docs/03): `approval_requests` table (type, payload 
 To be added to the canonical map in docs/07 §4 (one icon = one meaning):
 
 - `scale` — reconciliation & discrepancies (already named in docs/08 §B, not yet in the docs/07 map)
-- `eye` — read-only impersonation
+- `venetian-mask` — read-only impersonation (arbitrated in docs/07 §4: `eye` stays reveal/hide only)
 - `siren` — risk (queue, cases, flags)
 - `octagon-pause` — suspend / circuit-breaker (destructive pause, distinct from `clock` pending)
 - `book-text` — ledger adjustments / manual journal entries

@@ -40,8 +40,11 @@ Additional codes for the dashboard/app/public surfaces: `otp_invalid`, `otp_expi
 ```
 POST   /charges              create a charge (async)
 GET    /charges/{id}         retrieve
-GET    /charges              list (filter: status, channel, created[gte|lte], customer_phone)
+GET    /charges              list (filter: status, channel, created[gte|lte], customer_phone, payment_link)
 POST   /charges/{id}/refund  refund full/partial (where supported)
+POST   /charges/{id}/cancel  cancel a still-pending charge (merchant-side resend path) → 409 charge_not_cancelable if terminal
+POST   /charges/{id}/receipt/send   send/re-send the receipt (SMS/WhatsApp/email per notification prefs)
+GET    /receipts/{charge_id}.pdf    receipt PDF for a succeeded charge
 ```
 
 Create request:
@@ -84,10 +87,14 @@ POST /checkout_sessions      one-time hosted page for a cart (e-commerce redirec
 GET  /checkout_sessions/{id}
 POST /payment_links          reusable or single-use link
 GET  /payment_links / {id}   list, retrieve
+PATCH /payment_links/{id}    edit (title, amount, catalog fields, expiry) and re-activate (active: true)
 POST /payment_links/{id}/deactivate
+GET  /payment_links/{id}/stats   views, charges created/succeeded, conversion, volume
 ```
 
 Payment link create: `{ "title": "Gâteau d'anniversaire", "amount": 15000, "amount_type": "fixed" | "open", "reusable": true, "expires_at": null }` → returns `url` (`https://pay.ijimpay.com/l/abc123`) and `qr_png_url`.
+
+Optional catalog fields (product-style links, quantity picker on the hosted page): `product_name`, `image_url`, `unit_price`, `max_quantity`. Open-amount links (`amount_type: "open"`) accept `min_amount`.
 
 ### 2.3 Payouts (disbursements)
 
